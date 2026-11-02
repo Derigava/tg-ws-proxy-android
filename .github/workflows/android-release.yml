@@ -171,6 +171,11 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
+      - name: Free SDK space for the test device
+        run: |
+          # Python and its extensions are prebuilt; this app does not use NDK/CMake.
+          sudo rm -rf -- /usr/local/lib/android/sdk/ndk /usr/local/lib/android/sdk/cmake
+          df -h "$ANDROID_HOME"
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -183,8 +188,11 @@ jobs:
           target: ${{ matrix.target }}
           arch: x86_64
           profile: pixel_7
+          disk-size: 2048M
+          ram-size: 2048M
+          emulator-boot-timeout: 300
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
             test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = ${{ matrix.pages }}
             java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
