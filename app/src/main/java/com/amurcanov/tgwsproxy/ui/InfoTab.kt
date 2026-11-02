@@ -91,6 +91,8 @@ import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_POSTPONED
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_UPDATE
+import com.amurcanov.tgwsproxy.ApkInstaller
+import com.amurcanov.tgwsproxy.PRIVATE_UPDATE_MESSAGE
 import com.amurcanov.tgwsproxy.fetchLatestReleaseInfo
 import com.amurcanov.tgwsproxy.isNewerVersion
 import kotlin.math.PI
@@ -136,6 +138,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     var actionsExpanded by rememberSaveable { mutableStateOf(true) }
     var projectExpanded by rememberSaveable { mutableStateOf(true) }
     var isCheckingUpdates by remember { mutableStateOf(false) }
+    var updateBusy by remember { mutableStateOf(false) }
     var pendingManualRelease by remember { mutableStateOf<com.amurcanov.tgwsproxy.AppReleaseInfo?>(null) }
     val savedPort by settingsStore.port.collectAsStateWithLifecycle(initialValue = "1443")
     val savedPoolSize by settingsStore.poolSize.collectAsStateWithLifecycle(initialValue = 4)
@@ -148,6 +151,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v")}" }
     val scrollState = rememberScrollState()
     val updateStatusSubtitle = when {
+        !BuildConfig.APP_UPDATES_ENABLED -> "Закрытый тестовый канал · установка APK вручную"
         isCheckingUpdates -> stringResource(R.string.update_checking)
         updateLatestVersion.isNotBlank() && isNewerVersion(currentVersion, updateLatestVersion) ->
             stringResource(R.string.update_available_on_github, updateLatestVersion)
@@ -277,6 +281,10 @@ fun InfoTab(settingsStore: SettingsStore) {
                 title = stringResource(R.string.check_updates),
                 subtitle = updateStatusSubtitle,
                 onClick = {
+                    if (!BuildConfig.APP_UPDATES_ENABLED) {
+                        Toast.makeText(context, PRIVATE_UPDATE_MESSAGE, Toast.LENGTH_LONG).show()
+                        return@WideActionTile
+                    }
                     if (isCheckingUpdates) return@WideActionTile
                     isCheckingUpdates = true
                     scope.launch {
@@ -299,7 +307,7 @@ fun InfoTab(settingsStore: SettingsStore) {
                             return@launch
                         }
 
-                        if (isNewerVersion(currentVersion, release.versionTag)) {
+                        if (release.versionCode > BuildConfig.VERSION_CODE) {
                             settingsStore.saveUpdateDialogShown(release.versionTag, checkedAt)
                             pendingManualRelease = release
                         } else {
@@ -406,6 +414,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     pendingManualRelease?.let { release ->
         AppUpdateDialog(
             release = release,
+            busy = updateBusy,
             onPostpone = {
                 pendingManualRelease = null
                 Toast.makeText(context, context.getString(R.string.update_postponed_24h), Toast.LENGTH_SHORT).show()
@@ -423,14 +432,23 @@ fun InfoTab(settingsStore: SettingsStore) {
                 }
             },
             onUpdate = {
-                pendingManualRelease = null
+                updateBusy = true
                 scope.launch {
+                    try {
+                        val apk = ApkInstaller.prepare(context, release)
+                        if (ApkInstaller.install(context, apk)) pendingManualRelease = null
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Toast.makeText(context, e.message ?: "Не удалось установить обновление", Toast.LENGTH_LONG).show()
+                    } finally {
+                        updateBusy = false
+                    }
                     settingsStore.saveUpdateDialogAction(
                         version = release.versionTag,
                         action = UPDATE_DIALOG_ACTION_UPDATE,
                         actedAt = System.currentTimeMillis()
                     )
-                    openUrlInBrowser(context, release.releaseUrl)
                 }
             }
         )

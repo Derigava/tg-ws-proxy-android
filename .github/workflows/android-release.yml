@@ -1,0 +1,277 @@
+name: Android checks and releases
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      sync_upstream:
+        description: 'Synchronize the latest stable Flowseal release before building'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  cancel-in-progress: false
+
+env:
+  JAVA_VERSION: '21'
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+      version_code: ${{ steps.release.outputs.version_code }}
+      version_name: ${{ steps.release.outputs.version_name }}
+      updates_enabled: ${{ steps.release.outputs.updates_enabled }}
+      core_version: ${{ steps.upstream.outputs.core_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Resolve and verify upstream source
+        id: upstream
+        env:
+          EVENT: ${{ github.event_name }}
+          SYNC: ${{ inputs.sync_upstream }}
+        run: |
+          if [[ "$EVENT" == "schedule" || ( "$EVENT" == "workflow_dispatch" && "$SYNC" != "false" ) ]]; then
+            python scripts/sync_upstream.py
+          else
+            python scripts/sync_upstream.py --check
+          fi
+      - name: Decide whether a release is needed
+        id: release
+        env:
+          EVENT: ${{ github.event_name }}
+          CHANGED: ${{ steps.upstream.outputs.changed }}
+          PRIVATE: ${{ github.event.repository.private }}
+        run: |
+          build=true
+          if [[ "$EVENT" == "schedule" && "$CHANGED" == "false" ]]; then build=false; fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "version_code=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
+          echo "version_name=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          if [[ "$PRIVATE" == "true" ]]; then
+            echo 'updates_enabled=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'updates_enabled=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.release.outputs.build == 'true'
+        with:
+          name: upstream-candidate
+          path: |
+            upstream/flowseal
+            upstream/flowseal.lock.json
+          retention-days: 7
+          if-no-files-found: error
+
+  verify:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      APP_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
+      APP_VERSION_NAME: ${{ needs.prepare.outputs.version_name }}
+      APP_UPDATES_ENABLED: ${{ needs.prepare.outputs.updates_enabled }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Replace vendor tree, including files removed upstream
+        run: rm -rf -- upstream/flowseal
+      - uses: actions/download-artifact@v4
+        with:
+          name: upstream-candidate
+          path: upstream
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Python runtime and integrity checks
+        run: |
+          python -m pip install -r scripts/requirements-test.txt
+          python scripts/run_python_tests.py
+      - name: Install Android SDK platform and tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: JVM tests and unsigned ARM64 release
+        run: |
+          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain \
+            :app:testArm64DebugUnitTest :app:assembleArm64Release \
+            -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" \
+            -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+          mkdir -p unsigned
+          cp app/build/outputs/apk/arm64/release/*-unsigned.apk unsigned/app-arm64-unsigned.apk
+          python scripts/check_apk.py unsigned/app-arm64-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -P 16 -v 4 unsigned/app-arm64-unsigned.apk
+      - name: Pass only verified APK to signing job
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-unsigned-apk
+          path: unsigned/app-arm64-unsigned.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  android:
+    needs: [prepare, verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 24
+            target: default
+            pages: 4096
+          - api: 35
+            target: google_apis_ps16k
+            pages: 16384
+    env:
+      APP_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
+      APP_VERSION_NAME: ${{ needs.prepare.outputs.version_name }}
+      APP_UPDATES_ENABLED: ${{ needs.prepare.outputs.updates_enabled }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Replace vendor tree, including files removed upstream
+        run: rm -rf -- upstream/flowseal
+      - uses: actions/download-artifact@v4
+        with:
+          name: upstream-candidate
+          path: upstream
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android runtime and lifecycle tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = ${{ matrix.pages }}
+            java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:connectedEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+      - name: Keep verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports-api${{ matrix.api }}
+          path: |
+            app/build/reports
+            app/build/outputs/androidTest-results
+          retention-days: 14
+
+  release:
+    needs: [prepare, verify, android]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      APP_VERSION_CODE: ${{ needs.prepare.outputs.version_code }}
+      APP_VERSION_NAME: ${{ needs.prepare.outputs.version_name }}
+      CORE_VERSION: ${{ needs.prepare.outputs.core_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Replace vendor tree, including files removed upstream
+        run: rm -rf -- upstream/flowseal
+      - uses: actions/download-artifact@v4
+        with:
+          name: upstream-candidate
+          path: upstream
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-unsigned-apk
+          path: unsigned
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - name: Ensure release still targets the tested main revision
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          python scripts/sync_upstream.py --check
+          sdkmanager 'build-tools;35.0.0'
+      - name: Sign verified APK without executing upstream code
+        env:
+          TGWS_KEYSTORE_BASE64: ${{ secrets.TGWS_KEYSTORE_BASE64 }}
+          TGWS_KEYSTORE_PASSWORD: ${{ secrets.TGWS_KEYSTORE_PASSWORD }}
+          TGWS_KEY_ALIAS: ${{ secrets.TGWS_KEY_ALIAS }}
+          TGWS_KEY_PASSWORD: ${{ secrets.TGWS_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$TGWS_KEYSTORE_BASE64"
+          key="$RUNNER_TEMP/tgws-release.jks"
+          trap 'rm -f "$key"' EXIT
+          umask 077
+          printf '%s' "$TGWS_KEYSTORE_BASE64" | base64 --decode > "$key"
+          mkdir -p release
+          apk="release/tgwsproxy-$APP_VERSION_NAME-arm64.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$key" \
+            --ks-pass env:TGWS_KEYSTORE_PASSWORD --ks-key-alias "$TGWS_KEY_ALIAS" \
+            --key-pass env:TGWS_KEY_PASSWORD --out "$apk" unsigned/app-arm64-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
+          python scripts/release_metadata.py "$apk" --version-code "$APP_VERSION_CODE" --version-name "$APP_VERSION_NAME"
+      - name: Record tested upstream update
+        run: |
+          git add upstream/flowseal upstream/flowseal.lock.json
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "Update Flowseal core to $CORE_VERSION after Android checks"
+            git push origin HEAD:main
+          fi
+      - name: Publish signed release in the repository's current visibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$APP_VERSION_NAME"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to replace an installed version."
+            exit 1
+          fi
+          printf 'Flowseal core: %s\nAndroid versionCode: %s\n\nBuilt from the pinned source after Python, JVM, Android 16 KB and ARM64 binary checks.\nPrivate repositories require an authenticated browser to download test APKs.\n' \
+            "$CORE_VERSION" "$APP_VERSION_CODE" > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
+            --target "$(git rev-parse HEAD)" --title "TG WS Proxy Android $APP_VERSION_NAME" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

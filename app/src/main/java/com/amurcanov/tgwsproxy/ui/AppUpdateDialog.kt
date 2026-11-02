@@ -35,7 +35,8 @@ import com.amurcanov.tgwsproxy.RemoteVersionSource
 fun AppUpdateDialog(
     release: AppReleaseInfo,
     onPostpone: () -> Unit,
-    onUpdate: () -> Unit
+    onUpdate: () -> Unit,
+    busy: Boolean = false
 ) {
     val isTagOnly = release.source == RemoteVersionSource.Tag
     val title = if (isTagOnly) stringResource(com.amurcanov.tgwsproxy.R.string.update_new_tag_title) else stringResource(com.amurcanov.tgwsproxy.R.string.update_available_title)
@@ -105,6 +106,7 @@ fun AppUpdateDialog(
                 ) {
                     OutlinedButton(
                         onClick = onPostpone,
+                        enabled = !busy,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
@@ -118,13 +120,14 @@ fun AppUpdateDialog(
 
                     Button(
                         onClick = onUpdate,
+                        enabled = !busy,
                         modifier = Modifier
                             .weight(1f)
                             .height(50.dp),
                         shape = RoundedCornerShape(22.dp)
                     ) {
                         Text(
-                            text = actionLabel,
+                            text = if (busy) "Скачивание…" else actionLabel,
                             fontWeight = FontWeight.Bold
                         )
                     }

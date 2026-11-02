@@ -181,6 +181,7 @@ fun MainContent(settingsStore: SettingsStore) {
     )
     val updateLastCheckAt by settingsStore.updateLastCheckAt.collectAsStateWithLifecycle(initialValue = 0L)
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
+    var updateBusy by remember { mutableStateOf(false) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v")}" }
     val currentUpdatePostponeUntil by rememberUpdatedState(updatePostponeUntil)
     val currentUpdatePostponeVersion by rememberUpdatedState(updatePostponeVersion)
@@ -199,7 +200,7 @@ fun MainContent(settingsStore: SettingsStore) {
     }
 
     LaunchedEffect(updateCheckIntervalHours, updateLastCheckAt) {
-        if (updateCheckIntervalHours == UPDATE_CHECK_NEVER) return@LaunchedEffect
+        if (!BuildConfig.APP_UPDATES_ENABLED || updateCheckIntervalHours == UPDATE_CHECK_NEVER) return@LaunchedEffect
 
         val intervalMillis = updateIntervalHoursToMillis(updateCheckIntervalHours)
             ?: updateIntervalHoursToMillis(DEFAULT_UPDATE_CHECK_INTERVAL_HOURS)
@@ -226,7 +227,7 @@ fun MainContent(settingsStore: SettingsStore) {
         if (release == null) {
             Log.w("TgWsProxy", "[WARN] Update check: no release info, local=$currentVersion")
         } else {
-            val hasUpdate = isNewerVersion(currentVersion, release.versionTag)
+            val hasUpdate = release.versionCode > BuildConfig.VERSION_CODE
             val isPostponed =
                 currentUpdatePostponeVersion == release.versionTag && checkedAt < currentUpdatePostponeUntil
             Log.i(
@@ -325,6 +326,7 @@ fun MainContent(settingsStore: SettingsStore) {
     pendingRelease?.let { release ->
         AppUpdateDialog(
             release = release,
+            busy = updateBusy,
             onPostpone = {
                 pendingRelease = null
                 Toast.makeText(context, context.getString(R.string.update_postponed_24h), Toast.LENGTH_SHORT).show()
@@ -342,14 +344,23 @@ fun MainContent(settingsStore: SettingsStore) {
                 }
             },
             onUpdate = {
-                pendingRelease = null
+                updateBusy = true
                 scope.launch {
+                    try {
+                        val apk = ApkInstaller.prepare(context, release)
+                        if (ApkInstaller.install(context, apk)) pendingRelease = null
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Toast.makeText(context, e.message ?: "Не удалось установить обновление", Toast.LENGTH_LONG).show()
+                    } finally {
+                        updateBusy = false
+                    }
                     settingsStore.saveUpdateDialogAction(
                         version = release.versionTag,
                         action = UPDATE_DIALOG_ACTION_UPDATE,
                         actedAt = System.currentTimeMillis()
                     )
-                    openUrlInBrowser(context, release.releaseUrl)
                 }
             }
         )

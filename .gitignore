@@ -34,3 +34,9 @@ target/
 .vscode/
 .DS_Store
 Thumbs.db
+
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+outputs/

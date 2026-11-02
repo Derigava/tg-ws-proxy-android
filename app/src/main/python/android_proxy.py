@@ -1,0 +1,340 @@
+"""Android lifecycle boundary around the unmodified Flowseal proxy package.
+
+Only this module knows about upstream lifecycle details. The Kotlin boundary is
+three JSON functions: start(config_json), stop(), and snapshot(). Network work
+runs on a dedicated asyncio loop; no caller ever runs the proxy loop itself.
+"""
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import json
+import logging
+import re
+import threading
+import time
+from collections import deque
+
+from proxy import __version__ as CORE_VERSION
+from proxy import config as core_config
+from proxy import tg_ws_proxy as core
+from proxy.stats import stats as core_stats
+
+START_TIMEOUT = 15.0
+STOP_TIMEOUT = 15.0
+_SECRET_PATTERN = re.compile(r"(?i)(?:dd|ee)?[0-9a-f]{32,}")
+_logs = deque(maxlen=100)
+
+
+def _redact(message):
+    return _SECRET_PATTERN.sub("[secret redacted]", str(message))
+
+
+class _AndroidLogHandler(logging.Handler):
+    """Forward upstream records to the same tag as the Android log viewer."""
+
+    def emit(self, record):
+        try:
+            text = _redact(self.format(record))
+            _logs.append({"level": record.levelname, "message": text})
+            try:
+                from android.util import Log
+            except ImportError:
+                return  # Desktop test runner.
+            priority = 6 if record.levelno >= 40 else 5 if record.levelno >= 30 else 4
+            Log.println(priority, "TgWsProxy", text)
+        except Exception:
+            self.handleError(record)
+
+
+_logger = logging.getLogger("tg-mtproto-proxy")
+if not any(isinstance(handler, _AndroidLogHandler) for handler in _logger.handlers):
+    _logger.addHandler(_AndroidLogHandler())
+_logger.setLevel(logging.INFO)
+# Upstream logs contain connect links and raw secrets. Forward only the
+# redacted handler, never a root logger installed by the embedding process.
+_logger.propagate = False
+
+
+def _validated_config(value):
+    if not isinstance(value, dict):
+        raise ValueError("Configuration must be an object")
+    host = str(value.get("host", "127.0.0.1")).strip()
+    ipaddress.ip_address(host)
+    port = value.get("port", 1443)
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ValueError("Port must be an integer from 1 to 65535")
+    secret = str(value.get("secret", "")).strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{32}", secret):
+        raise ValueError("Secret must contain 32 hexadecimal characters")
+    pool_size = value.get("pool_size", 4)
+    if isinstance(pool_size, bool) or not isinstance(pool_size, int) or not 0 <= pool_size <= 16:
+        raise ValueError("Pool size must be an integer from 0 to 16")
+    cf_enabled = value.get("cf_enabled", True)
+    if not isinstance(cf_enabled, bool):
+        raise ValueError("cf_enabled must be a boolean")
+    dc_value = value.get("dc_ips", "")
+    if not isinstance(dc_value, str):
+        raise ValueError("dc_ips must be a comma-separated DC:IP string")
+    entries = [item.strip() for item in dc_value.replace(";", ",").split(",") if item.strip()]
+    redirects = core_config.parse_dc_ip_list(entries)
+    cf_domain = value.get("cf_domain", "")
+    if not isinstance(cf_domain, str):
+        raise ValueError("cf_domain must be a string")
+    domains = core_config.coerce_domain_list(cf_domain)
+    if any(not core_config._is_valid_domain(domain) for domain in domains):
+        raise ValueError("Invalid Cloudflare domain")
+    return {
+        "host": host,
+        "port": port,
+        "secret": secret,
+        "full_secret": "dd" + secret,
+        "dc_ips": ",".join(entries),
+        "dc_redirects": redirects,
+        "pool_size": pool_size,
+        "cf_enabled": cf_enabled,
+        "cf_domain": ",".join(domains),
+    }
+
+
+class _Runtime:
+    def __init__(self):
+        self._control = threading.RLock()
+        self._lock = threading.RLock()
+        self._thread = None
+        self._loop = None
+        self._stop_event = None
+        self._stop_requested = threading.Event()
+        self._ready = threading.Event()
+        self._state = "stopped"
+        self._error = None
+        self._config = None
+        self._stats = {}
+        self._refresh_threads = []
+
+    def _snapshot(self):
+        with self._lock:
+            config = None
+            if self._config is not None:
+                config = {key: value for key, value in self._config.items() if key != "dc_redirects"}
+            return {
+                "state": self._state,
+                "running": self._state == "running",
+                "error": self._error,
+                "core_version": CORE_VERSION,
+                "config": config,
+                "stats": dict(self._stats),
+            }
+
+    def snapshot(self):
+        return json.dumps(self._snapshot())
+
+    def _fail(self, exc):
+        with self._lock:
+            self._error = _redact(exc)
+            if self._state != "running":
+                self._state = "error"
+        _logger.error("Proxy lifecycle: %s", _redact(exc))
+        return self.snapshot()
+
+    def start(self, config_json):
+        # stop() sets its event before waiting for this control lock, so it can
+        # interrupt startup rather than waiting for START_TIMEOUT.
+        with self._control:
+            try:
+                config = _validated_config(json.loads(str(config_json)))
+            except (ValueError, TypeError) as exc:
+                return self._fail(exc)
+            with self._lock:
+                if self._thread and self._thread.is_alive():
+                    if self._state == "running" and self._config == config:
+                        return self.snapshot()
+                    return self._fail("Proxy is already active; stop it before changing settings")
+                if any(thread.is_alive() for thread in self._refresh_threads):
+                    return self._fail("Previous domain refresh is still stopping; retry shortly")
+                self._config = config
+                self._error = None
+                self._stats = {}
+                self._state = "starting"
+                self._ready.clear()
+                self._stop_requested.clear()
+                self._thread = threading.Thread(target=self._thread_main, name="FlowsealProxy", daemon=True)
+                self._thread.start()
+            if not self._ready.wait(START_TIMEOUT):
+                self._request_stop()
+                self._thread.join(STOP_TIMEOUT)
+                return self._fail("Timed out while opening the local proxy listener")
+            return self.snapshot()
+
+    def _request_stop(self):
+        self._stop_requested.set()
+        with self._lock:
+            loop, event = self._loop, self._stop_event
+        if loop and event and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                pass  # Loop completed between the checks.
+
+    def stop(self):
+        self._request_stop()
+        with self._control:
+            self._request_stop()  # Also cover a stop racing with start's reset.
+            with self._lock:
+                thread = self._thread
+                if not thread or not thread.is_alive():
+                    self._state = "stopped"
+                    self._config = None
+                    self._error = None
+                    return self.snapshot()
+                self._state = "stopping"
+            thread.join(STOP_TIMEOUT)
+            if thread.is_alive():
+                return self._fail("Proxy shutdown is still in progress")
+            with self._lock:
+                self._state = "stopped"
+                self._config = None
+                self._error = None
+            return self.snapshot()
+
+    def _apply_config(self):
+        config = self._config
+        # Update the existing dataclass, since upstream modules import the
+        # singleton by reference. Reset every field to avoid stale options.
+        defaults = core_config.ProxyConfig()
+        for key, value in vars(defaults).items():
+            setattr(core_config.proxy_config, key, value)
+        target = core_config.proxy_config
+        target.host = config["host"]
+        target.port = config["port"]
+        target.secret = config["secret"]
+        target.dc_redirects = dict(config["dc_redirects"])
+        target.pool_size = config["pool_size"]
+        target.fallback_cfproxy = config["cf_enabled"]
+        target.cfproxy_user_domains = core_config.coerce_domain_list(config["cf_domain"])
+        core_stats.__init__()
+
+    async def _watch_listener(self, task):
+        while not task.done():
+            server = core._server_instance
+            if server is not None and server.sockets and all(sock.fileno() >= 0 for sock in server.sockets):
+                with self._lock:
+                    if self._state == "starting" and not self._stop_requested.is_set():
+                        self._state = "running"
+                        self._ready.set()
+            with self._lock:
+                self._stats = dict(vars(core_stats))
+                self._stats["summary"] = core_stats.summary()
+            await asyncio.sleep(0.05)
+
+    async def _session(self):
+        with self._lock:
+            self._loop = asyncio.get_running_loop()
+            self._stop_event = asyncio.Event()
+            if self._stop_requested.is_set():
+                self._stop_event.set()
+        task = asyncio.create_task(core._run(self._stop_event), name="flowseal-core")
+        watcher = asyncio.create_task(self._watch_listener(task), name="flowseal-status")
+        stop_waiter = asyncio.create_task(self._stop_event.wait(), name="flowseal-stop")
+        try:
+            done, _ = await asyncio.wait((task, stop_waiter), return_when=asyncio.FIRST_COMPLETED)
+            if task in done:
+                await task  # Propagate bind/import/runtime failures.
+                if not self._stop_requested.is_set():
+                    raise RuntimeError("Proxy listener terminated unexpectedly")
+            else:
+                # Upstream waits for stop_event only after pool warmup. Bound
+                # that grace period, then cancel; _cleanup also handles the
+                # upstream pre-warmup path which has no finally block.
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=0.75)
+                except asyncio.TimeoutError:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+        finally:
+            for item in (watcher, stop_waiter, task):
+                if not item.done():
+                    item.cancel()
+            await asyncio.gather(watcher, stop_waiter, task, return_exceptions=True)
+            await self._cleanup()
+
+    async def _cleanup(self):
+        core_config._refresh_stop.set()
+        server = core._server_instance
+        if server is not None:
+            server.close()
+            await server.wait_closed()
+        await core.ws_pool.close()
+        await core.cf_worker_pool.close()
+        if core.cf_h2_pool is not None:
+            await core.cf_h2_pool.close()
+            core.cf_h2_pool = None
+        core._server_instance = None
+        core._server_stop_event = None
+        pending = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        core._client_tasks.clear()
+
+    def _thread_main(self):
+        try:
+            self._apply_config()
+            asyncio.run(self._session())
+        except Exception as exc:
+            self._fail(exc)
+        finally:
+            core_config._refresh_stop.set()
+            # Fetch has an upstream 10-second HTTP timeout. Reap its thread so
+            # rapid start/stop never accumulates hourly refresh workers.
+            self._refresh_threads = [thread for thread in threading.enumerate()
+                                     if thread.name == "cfproxy-domains-refresh"]
+            deadline = time.monotonic() + 11.0
+            for thread in self._refresh_threads:
+                thread.join(max(0, deadline - time.monotonic()))
+            with self._lock:
+                self._loop = None
+                self._stop_event = None
+                if self._state != "error":
+                    self._state = "stopped"
+                self._ready.set()
+
+
+_runtime = _Runtime()
+
+
+def start(config_json):
+    """Start once; acknowledge only after the local listener is bound."""
+    return _runtime.start(config_json)
+
+
+def stop():
+    """Stop and release listener, pools, tasks and domain refresh worker."""
+    return _runtime.stop()
+
+
+def snapshot():
+    """Return a JSON snapshot; callers must never log its secret fields."""
+    return _runtime.snapshot()
+
+
+def self_test():
+    """Offline native-dependency smoke check, also used on Android devices."""
+    import cryptography
+    import httpx
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+    from proxy._aes import Cipher, algorithms, modes
+    from proxy.utils import create_ssl_context
+
+    key = bytes.fromhex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
+    iv = bytes.fromhex("f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff")
+    plain = bytes.fromhex("6bc1bee22e409f96e93d7e117393172a")
+    actual = Cipher(algorithms.AES(key), modes.CTR(iv)).encryptor().update(plain)
+    if actual.hex() != "601ec313775789a5b7a7f504bbf3d228":
+        raise RuntimeError("AES-256-CTR native smoke test failed")
+    X25519PrivateKey.generate().public_key()
+    context = create_ssl_context()
+    with httpx.Client(http2=True, verify=context):
+        pass
+    return json.dumps({"ok": True, "core_version": CORE_VERSION,
+                       "cryptography": cryptography.__version__, "httpx": httpx.__version__})

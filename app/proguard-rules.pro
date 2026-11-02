@@ -46,3 +46,5 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+-keep class com.amurcanov.tgwsproxy.PythonLogBridge { *; }

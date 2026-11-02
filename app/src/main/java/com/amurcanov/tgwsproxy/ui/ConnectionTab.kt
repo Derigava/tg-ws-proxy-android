@@ -1,9 +1,6 @@
 package com.amurcanov.tgwsproxy.ui
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -18,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,6 +37,7 @@ import com.amurcanov.tgwsproxy.ProxyController
 import com.amurcanov.tgwsproxy.ProxyService
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.R
+import com.amurcanov.tgwsproxy.TelegramConnector
 import kotlinx.coroutines.launch
 
 @Composable
@@ -48,12 +45,12 @@ fun ConnectionTab(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val isRunning by ProxyService.isRunning.collectAsStateWithLifecycle()
     val isVerifiedRunning by ProxyService.isVerifiedRunning.collectAsStateWithLifecycle()
+    val activeConnection by ProxyService.activeConnection.collectAsStateWithLifecycle()
 
     val isReady by settingsStore.isReady.collectAsStateWithLifecycle(initialValue = false)
 
     // Settings
     val savedPort by settingsStore.port.collectAsStateWithLifecycle(initialValue = "1443")
-    val savedBindIp by settingsStore.bindIp.collectAsStateWithLifecycle(initialValue = "127.0.0.1")
     val savedCfEnabled by settingsStore.cfproxyEnabled.collectAsStateWithLifecycle(initialValue = true)
     val savedPoolSize by settingsStore.poolSize.collectAsStateWithLifecycle(initialValue = 4)
     val savedSecretKey by settingsStore.secretKey.collectAsStateWithLifecycle(initialValue = "LOADING")
@@ -95,15 +92,7 @@ fun ConnectionTab(settingsStore: SettingsStore) {
         }
     }
 
-    val port = savedPort.toIntOrNull() ?: 1443
-    val secretForUrl = remember(savedSecretKey) {
-        val raw = savedSecretKey.trim()
-        if (raw.isNotEmpty() && raw != "LOADING") raw else "00000000000000000000000000000000"
-    }
-    val bindIp = savedBindIp.trim().takeIf { it.isNotEmpty() } ?: "127.0.0.1"
-    val proxyUrl = "https://t.me/proxy?server=$bindIp&port=$port&secret=dd$secretForUrl"
-    
-    var applyMode by rememberSaveable { mutableStateOf("packages") }
+    val proxyUrl = activeConnection?.let { TelegramConnector.proxyUri(it).toString() }.orEmpty()
 
     val connectAction = {
         if (!isRunning && !isStarting) {
@@ -242,14 +231,10 @@ fun ConnectionTab(settingsStore: SettingsStore) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Button(
-                            onClick = { 
-                                if (applyMode == "packages") {
-                                    applyToTelegramPackages(context, proxyUrl)
-                                } else {
-                                    openTelegram(context, proxyUrl)
-                                }
+                            onClick = {
+                                activeConnection?.let { TelegramConnector.open(context, it) }
                             },
-                            enabled = isRunning,
+                            enabled = activeConnection != null,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp),
@@ -268,21 +253,16 @@ fun ConnectionTab(settingsStore: SettingsStore) {
                             )
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ModeChip(
-                                label = "Пакеты",
-                                selected = applyMode == "packages",
-                                modifier = Modifier.weight(1f).height(48.dp)
-                            ) { applyMode = "packages" }
-                            ModeChip(
-                                label = "Ссылка",
-                                selected = applyMode == "link",
-                                modifier = Modifier.weight(1f).height(48.dp)
-                            ) { applyMode = "link" }
+                        activeConnection?.let { connection ->
+                            TextButton(onClick = { TelegramConnector.open(context, connection, chooseAgain = true) }) {
+                                Text("Выбрать другой клиент")
+                            }
                         }
+                        Text(
+                            text = "Приложение ${BuildConfig.VERSION_NAME} · ядро Flowseal ${BuildConfig.CORE_VERSION}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
 
                         ProxyStatusPanel(
                             cfEnabled = savedCfEnabled,
@@ -291,8 +271,17 @@ fun ConnectionTab(settingsStore: SettingsStore) {
                             version = currentVersion
                         )
 
+                        activeConnection?.let { connection ->
+                            Text(
+                                text = "MTProto · ${TelegramConnector.localHost(connection.host)}:${connection.port}\nSecret: ${connection.secret}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         Surface(
                             onClick = {
+                                if (proxyUrl.isEmpty()) return@Surface
                                 val cb = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 cb.setPrimaryClip(android.content.ClipData.newPlainText("Proxy", proxyUrl))
                                 Toast.makeText(context, context.getString(R.string.copied), Toast.LENGTH_SHORT).show()
@@ -311,7 +300,7 @@ fun ConnectionTab(settingsStore: SettingsStore) {
                                     .padding(horizontal = 16.dp)
                             ) {
                                 Text(
-                                    text = proxyUrl,
+                                    text = proxyUrl.ifEmpty { "Запустите прокси для получения ссылки" },
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
                                     maxLines = 1,
@@ -412,92 +401,4 @@ private fun ProxyStatusDivider() {
             .width(1.dp)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
     )
-}
-
-@Composable
-private fun ModeChip(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(24.dp),
-        modifier = modifier,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-        )
-    ) {
-        Text(
-            label,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-private val telegramPackages = listOf(
-    "org.telegram.messenger",
-    "com.radolyn.ayugram",
-    "com.exteragram.messenger",
-    "org.telegram.plus",
-    "ir.ilmili.telegraph",
-    "org.telegram.BifToGram",
-    "tw.nekomimi.nekogram",
-    "xyz.nextalone.nagram",
-    "uz.unnarsx.cherrygram",
-    "org.telegram.mdgram",
-    "org.forkclient.messenger.beta",
-    "app.nicegram",
-    "top.qwq2333.nullgram",
-    "com.iMe.android",
-    "ru.dahl.messenger",
-    "com.scriptsaz.litegram",
-    "org.thunderdog.challegram"
-)
-
-private fun applyToTelegramPackages(context: Context, url: String) {
-    val pm = context.packageManager
-    val availablePackages = telegramPackages.filter {
-        try {
-            pm.getPackageInfo(it, 0)
-            true
-        } catch (e: PackageManager.NameNotFoundException) {
-            false
-        }
-    }
-
-    if (availablePackages.isEmpty()) {
-        Toast.makeText(context, "Клиенты не найдены", Toast.LENGTH_SHORT).show()
-        return
-    }
-
-    val targetedIntents = availablePackages.map { pkg ->
-        Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            setPackage(pkg)
-        }
-    }
-
-    if (targetedIntents.size == 1) {
-        val intent = targetedIntents.first().apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        try {
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Ошибка при открытии клиента", Toast.LENGTH_SHORT).show()
-        }
-    } else {
-        val chooserIntent = Intent.createChooser(targetedIntents.first(), "Выберите клиент")
-        chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, targetedIntents.drop(1).toTypedArray())
-        chooserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(chooserIntent)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Ошибка при выборе клиента", Toast.LENGTH_SHORT).show()
-        }
-    }
 }
