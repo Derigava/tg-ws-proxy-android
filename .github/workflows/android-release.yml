@@ -171,6 +171,11 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
+      - name: Build test packages before starting the emulator
+        run: |
+          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+          python scripts/create_update_test_fixtures.py --sdk "$ANDROID_HOME" --output build/tgws-updater-fixtures --keystore "$HOME/.android/debug.keystore" --storepass android --alias androiddebugkey --version-code "$APP_VERSION_CODE"
+          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain --stop
       - name: Free SDK space for the test device
         run: |
           # Python and its extensions are prebuilt; this app does not use NDK/CMake.
@@ -194,11 +199,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
-            java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
-            python scripts/create_update_test_fixtures.py --sdk "$ANDROID_HOME" --output build/tgws-updater-fixtures --keystore "$HOME/.android/debug.keystore" --storepass android --alias androiddebugkey --version-code "$APP_VERSION_CODE"
-            adb shell rm -rf /data/local/tmp/tgws-updater-fixtures
-            adb push build/tgws-updater-fixtures /data/local/tmp/
-            java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:connectedEmulatorDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${{ matrix.pages }} -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+            python scripts/run_android_tests.py --apk app/build/outputs/apk/emulator/debug/app-emulator-debug.apk --test-apk app/build/outputs/apk/androidTest/emulator/debug/app-emulator-debug-androidTest.apk --fixtures build/tgws-updater-fixtures --expected-page-size ${{ matrix.pages }} --report app/build/outputs/androidTest-results/api-${{ matrix.api }}.txt
       - name: Keep verification reports
         if: always()
         uses: actions/upload-artifact@v4
