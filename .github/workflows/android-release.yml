@@ -194,12 +194,11 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
-            test "$(adb shell getconf PAGE_SIZE | tr -d '\r')" = ${{ matrix.pages }}
             java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
             python scripts/create_update_test_fixtures.py --sdk "$ANDROID_HOME" --output build/tgws-updater-fixtures --keystore "$HOME/.android/debug.keystore" --storepass android --alias androiddebugkey --version-code "$APP_VERSION_CODE"
             adb shell rm -rf /data/local/tmp/tgws-updater-fixtures
             adb push build/tgws-updater-fixtures /data/local/tmp/
-            java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:connectedEmulatorDebugAndroidTest -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+            java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:connectedEmulatorDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.expectedPageSize=${{ matrix.pages }} -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
       - name: Keep verification reports
         if: always()
         uses: actions/upload-artifact@v4

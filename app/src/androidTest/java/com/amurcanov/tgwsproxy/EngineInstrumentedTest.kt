@@ -13,6 +13,12 @@ import java.net.ServerSocket
 class EngineInstrumentedTest {
     private fun engine() = PythonProxyEngine(InstrumentationRegistry.getInstrumentation().targetContext)
     private fun config(port: Int) = ProxyConfiguration("127.0.0.1", port, "", "1234567890abcdef1234567890abcdef", 0, false, "example.com")
+    @Test fun nativePageSizeMatchesDeviceMatrix() {
+        val pageSize = android.system.Os.sysconf(android.system.OsConstants._SC_PAGESIZE)
+        val expected = InstrumentationRegistry.getArguments().getString("expectedPageSize")?.toLong()
+        if (expected != null) assertEquals(expected, pageSize)
+        else assertTrue(pageSize == 4096L || pageSize == 16384L)
+    }
     @Test fun cryptoAndCoreImports() {
         engine()
         val python = Python.getInstance()
