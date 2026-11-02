@@ -40,7 +40,15 @@ def main():
     args.report.write_text(result.stdout, encoding="utf-8")
     print(result.stdout)
     result.check_returncode()
-    print(f"Android gate passed: {validate_result(result.stdout)} tests; page size {args.expected_page_size}")
+    try:
+        count = validate_result(result.stdout)
+    except ValueError:
+        crash = subprocess.run(["adb", "logcat", "-d", "-b", "crash", "-v", "threadtime"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=30)
+        args.report.with_suffix(".crash.txt").write_text(crash.stdout, encoding="utf-8")
+        print("Android crash buffer:\n" + crash.stdout[-20000:])
+        raise
+    print(f"Android gate passed: {count} tests; page size {args.expected_page_size}")
 
 
 if __name__ == "__main__":
