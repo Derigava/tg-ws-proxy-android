@@ -14,6 +14,7 @@ val localProps = Properties().apply {
 }
 fun signingValue(env: String, prop: String) = System.getenv(env) ?: localProps.getProperty(prop)
 val releaseKey = signingValue("TGWS_KEYSTORE_FILE", "KEYSTORE_FILE")
+val testKeystore = providers.gradleProperty("testKeystore").orNull
 
 android {
     namespace = "com.amurcanov.tgwsproxy"
@@ -41,6 +42,14 @@ android {
         }
     }
     signingConfigs {
+        getByName("debug") {
+            if (testKeystore != null) {
+                storeFile = file(testKeystore)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             if (releaseKey != null) {
                 storeFile = file(releaseKey)
