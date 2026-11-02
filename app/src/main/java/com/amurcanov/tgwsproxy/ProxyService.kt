@@ -21,6 +21,11 @@ class ProxyService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var generation = 0
     private var starting = false
+        set(value) {
+            field = value
+            preparing.value = value
+            ProxyTileService.requestSync(this)
+        }
     private var stopping = false
     private var lastText = ""
 
@@ -38,6 +43,8 @@ class ProxyService : Service() {
         const val EXTRA_SECRET_KEY = "EXTRA_SECRET_KEY"
         private const val CHANNEL = "TG_WS_Proxy_Service_v5"
         private const val NOTIFICATION = 101
+        private val preparing = MutableStateFlow(false)
+        val isStarting: StateFlow<Boolean> = preparing
         private val running = MutableStateFlow(false)
         val isRunning: StateFlow<Boolean> = running
         val isVerifiedRunning: StateFlow<Boolean> = running
@@ -93,6 +100,7 @@ class ProxyService : Service() {
                     if (result.connection == null) {
                         Log.e("TgWsProxy", "Proxy start failed: ${result.error}")
                         update(getString(R.string.notification_error, result.error ?: result.state))
+                        android.widget.Toast.makeText(this@ProxyService, getString(R.string.notification_error, result.error ?: result.state), android.widget.Toast.LENGTH_LONG).show()
                         stop()
                     } else {
                         connection.value = result.connection
@@ -190,6 +198,7 @@ class ProxyService : Service() {
     override fun onDestroy() {
         ++generation
         scope.cancel()
+        starting = false
         connection.value = null; running.value = false
         releaseWakeLock()
         // Service teardown must also clean up when Android did not send ACTION_STOP.

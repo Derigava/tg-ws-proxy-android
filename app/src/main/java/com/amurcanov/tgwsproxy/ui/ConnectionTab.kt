@@ -79,32 +79,22 @@ fun ConnectionTab(settingsStore: SettingsStore) {
         }
     }
 
-    var isStarting by remember { mutableStateOf(false) }
+    val isStarting by ProxyService.isStarting.collectAsStateWithLifecycle()
     val statusText = when {
         isVerifiedRunning -> stringResource(R.string.status_connected)
         isStarting || isRunning -> stringResource(R.string.status_connecting)
         else -> stringResource(R.string.status_disconnected)
     }
 
-    LaunchedEffect(isRunning, isVerifiedRunning) {
-        if (isVerifiedRunning || !isRunning) {
-            isStarting = false
-        }
-    }
-
     val proxyUrl = activeConnection?.let { TelegramConnector.proxyUri(it).toString() }.orEmpty()
 
     val connectAction = {
         if (!isRunning && !isStarting) {
-            isStarting = true
             scope.launch {
-                val started = ProxyController.startFromSavedSettings(
+                ProxyController.startFromSavedSettings(
                     context = context,
                     showInvalidPortToast = true
                 )
-                if (!started) {
-                    isStarting = false
-                }
             }
         }
     }

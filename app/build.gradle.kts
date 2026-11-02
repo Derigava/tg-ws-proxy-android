@@ -77,6 +77,7 @@ android {
 chaquopy {
     defaultConfig {
         version = "3.13"
+        (providers.gradleProperty("buildPython").orNull ?: localProps.getProperty("buildPython"))?.let { buildPython(it) }
         pip {
             install("httpx[http2]==0.28.1")
             install("certifi==2026.10.23")

@@ -2,6 +2,8 @@ package com.amurcanov.tgwsproxy
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.os.ParcelFileDescriptor
+import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.security.MessageDigest
 import org.junit.Assert.*
@@ -54,6 +56,55 @@ class TelegramAndUpdateTest {
             val sizeError = runCatching { ApkInstaller.verifyArchive(context, file, release.copy(apkSize = contents.size + 1L)) }.exceptionOrNull()
             assertTrue(sizeError?.message.orEmpty().contains("размер"))
         } finally { file.delete() }
+    }
+
+    /** Fixtures are required: a missing generator/push setup fails the security gate. */
+    private fun withFixture(name: String, block: (File, AppReleaseInfo) -> Unit) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val directory = InstrumentationRegistry.getArguments().getString("updateFixtureDirectory")
+            ?: "/data/local/tmp/tgws-updater-fixtures"
+        require(Regex("[A-Za-z0-9_./-]+").matches(directory))
+        val file = File.createTempFile("signed-update-fixture-", ".apk", context.cacheDir)
+        try {
+            val descriptor = instrumentation.uiAutomation.executeShellCommand("cat '$directory/$name.apk'")
+            ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
+                file.outputStream().use { input.copyTo(it) }
+            }
+            check(file.length() > 0) { "Required updater fixture missing: $directory/$name.apk" }
+            @Suppress("DEPRECATION")
+            val installedCode = PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(context.packageName, 0))
+            val digest = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+            val release = AppReleaseInfo("v99.0", "https://github.com/Derigava/tg-ws-proxy-android/releases/tag/v99.0",
+                versionCode = if (name == "same-version") installedCode else installedCode + 1,
+                apkName = "$name.apk", apkUrl = "https://example.invalid/$name.apk",
+                apkSize = file.length(), sha256 = digest, checksumsUrl = "https://example.invalid/SHA256SUMS")
+            block(file, release)
+        } finally { file.delete() }
+    }
+
+    @Test fun acceptsNewerApkWithSamePackageAndSigningKey() = withFixture("valid") { apk, release ->
+        ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release)
+    }
+
+    @Test fun rejectsApkSignedWithAnotherKey() = withFixture("wrong-key") { apk, release ->
+        val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
+        assertTrue("Foreign signer must be rejected after hash/package/version validation", error?.message.orEmpty().contains("другим ключом"))
+    }
+
+    @Test fun rejectsApkForAnotherPackage() = withFixture("wrong-package") { apk, release ->
+        val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
+        assertTrue(error?.message.orEmpty().contains("другого приложения"))
+    }
+
+    @Test fun rejectsAlreadyInstalledVersion() = withFixture("same-version") { apk, release ->
+        val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
+        assertTrue(error?.message.orEmpty().contains("уже установлено"))
+    }
+
+    @Test fun rejectsVersionMetadataMismatch() = withFixture("valid") { apk, release ->
+        val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release.copy(versionCode = release.versionCode + 1)) }.exceptionOrNull()
+        assertTrue(error?.message.orEmpty().contains("Версия APK"))
     }
 
     @Test fun releaseVersionComparisonHandlesMissingSegments() {

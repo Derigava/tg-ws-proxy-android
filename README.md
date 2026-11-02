@@ -44,15 +44,18 @@ GitHub Actions проверяет стабильные релизы Flowseal к�
 
 ## Сборка и проверки
 
-Нужны JDK 21, Python 3.13, Android SDK platform 35 и build-tools 35.0.0. Kotlin-компиляция использует Java 17; NDK и Rust для нового движка не требуются. Python 3.13 должен находиться в PATH или определяться через `py -3.13` в Windows. SDK задаётся через `ANDROID_HOME` или локальный `local.properties`.
+Нужны JDK 21, Python 3.13, Android SDK platform 35 и build-tools 36.0.0. Kotlin-компиляция использует Java 17; NDK и Rust для нового движка не требуются. Python 3.13 должен находиться в PATH или определяться через `py -3.13` в Windows. SDK задаётся через `ANDROID_HOME` или локальный `local.properties`.
 
 Windows:
 
 ```powershell
 py -3.13 -m pip install -r scripts/requirements-test.txt
-py -3.13 scripts/run_python_tests.py
+py -3.13 -m unittest discover -s tests/python -v
+py -3.13 -m unittest discover -s tests/scripts -v
 .\gradlew.bat :app:testArm64DebugUnitTest :app:assembleArm64Release
 ```
+
+Полный протокольный набор запускается в Linux (GitHub Actions или WSL). В Windows некоторые сетевые тесты Flowseal с короткими таймаутами не укладываются в отведённое время; их исходники и условия проверки не изменены.
 
 Linux / GitHub Actions:
 
