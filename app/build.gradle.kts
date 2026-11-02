@@ -72,7 +72,7 @@ android {
     }
     // The archived Rust binaries are not part of the Python-based application.
     sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets"))
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets").get().asFile)
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 chaquopy {
