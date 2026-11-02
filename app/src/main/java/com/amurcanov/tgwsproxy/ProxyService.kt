@@ -27,6 +27,7 @@ class ProxyService : Service() {
             ProxyTileService.requestSync(this)
         }
     private var stopping = false
+    private var needsEngineCleanup = true
     private var lastText = ""
 
     companion object {
@@ -82,6 +83,7 @@ class ProxyService : Service() {
     private fun start(config: ProxyConfiguration) {
         if (starting || stopping || running.value) return
         configuration = config
+        needsEngineCleanup = true
         starting = true
         val current = ++generation
         foreground(getString(R.string.notification_starting))
@@ -162,8 +164,10 @@ class ProxyService : Service() {
                 catch (e: Exception) { Log.w("TgWsProxy", "Startup cancellation failed", e) }
             }
             operations.withLock {
-                try { withContext(Dispatchers.IO) { engine?.stop() } }
-                catch (e: Exception) { Log.e("TgWsProxy", "Proxy cleanup failed", e) }
+                try {
+                    val result = withContext(Dispatchers.IO) { engine?.stop() }
+                    needsEngineCleanup = result != null && result.state != "stopped"
+                } catch (e: Exception) { Log.e("TgWsProxy", "Proxy cleanup failed", e) }
             }
             releaseWakeLock()
             stopping = false
@@ -202,7 +206,7 @@ class ProxyService : Service() {
         connection.value = null; running.value = false
         releaseWakeLock()
         // Service teardown must also clean up when Android did not send ACTION_STOP.
-        CoroutineScope(Dispatchers.IO).launch {
+        if (needsEngineCleanup) CoroutineScope(Dispatchers.IO).launch {
             runCatching { engine?.stop() }
             // Read engine again after initialization/start relinquishes the
             // mutex; capturing null before initialization would leak it.

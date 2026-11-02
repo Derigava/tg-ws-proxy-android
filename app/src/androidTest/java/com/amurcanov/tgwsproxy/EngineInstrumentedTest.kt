@@ -48,4 +48,38 @@ class EngineInstrumentedTest {
             }
         } finally { runtime.stop() }
     }
+    @Test fun foregroundServicePublishesReadyConfigAndStops() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val activity = instrumentation.startActivitySync(android.content.Intent(context, MainActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        val port = ServerSocket(0).use { it.localPort }
+        fun awaitCondition(check: () -> Boolean) {
+            val deadline = System.currentTimeMillis() + 20_000
+            while (!check() && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            assertTrue("Service state did not settle", check())
+        }
+        try {
+            repeat(2) {
+                androidx.core.content.ContextCompat.startForegroundService(context,
+                    android.content.Intent(context, ProxyService::class.java).setAction(ProxyService.ACTION_START)
+                        .putExtra(ProxyService.EXTRA_PORT, port)
+                        .putExtra(ProxyService.EXTRA_POOL_SIZE, 0)
+                        .putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, false)
+                        .putExtra(ProxyService.EXTRA_CFPROXY_DOMAIN, "example.com")
+                        .putExtra(ProxyService.EXTRA_SECRET_KEY, "1234567890abcdef1234567890abcdef"))
+                awaitCondition { ProxyService.isRunning.value }
+                assertEquals(port, ProxyService.activeConnection.value?.port)
+                assertEquals("dd1234567890abcdef1234567890abcdef", ProxyService.activeConnection.value?.secret)
+                context.startService(android.content.Intent(context, ProxyService::class.java).setAction(ProxyService.ACTION_STOP))
+                awaitCondition { !ProxyService.isRunning.value && ProxyService.activeConnection.value == null }
+                // Wait for asynchronous cleanup/stopSelf before the next start.
+                Thread.sleep(1000)
+            }
+        } finally {
+            context.startService(android.content.Intent(context, ProxyService::class.java).setAction(ProxyService.ACTION_STOP))
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
 }
