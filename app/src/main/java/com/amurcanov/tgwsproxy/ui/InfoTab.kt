@@ -101,8 +101,8 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlinx.coroutines.launch
 
-private const val AndroidForkRepoUrl = "https://github.com/amurcanov/tg-ws-proxy-android"
-private const val AndroidForkIssuesUrl = "https://github.com/amurcanov/tg-ws-proxy-android/issues"
+private const val AndroidForkRepoUrl = "https://github.com/Derigava/tg-ws-proxy-android"
+private const val AndroidForkIssuesUrl = "https://github.com/Derigava/tg-ws-proxy-android/issues"
 private const val DeveloperProfileUrl = "https://github.com/amurcanov"
 private const val OriginalProjectUrl = "https://github.com/Flowseal/tg-ws-proxy"
 private const val ProxyReferenceUrl = "https://github.com/Flowseal/tg-ws-proxy/issues/389"

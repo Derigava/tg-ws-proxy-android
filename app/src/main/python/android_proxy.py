@@ -42,7 +42,8 @@ class _AndroidLogHandler(logging.Handler):
             except ImportError:
                 return  # Desktop test runner.
             priority = 6 if record.levelno >= 40 else 5 if record.levelno >= 30 else 4
-            Log.println(priority, "TgWsProxy", text)
+            prefix = "[ERROR] " if priority == 6 else "[WARN] " if priority == 5 else ""
+            Log.println(priority, "TgWsProxy", prefix + text)
         except Exception:
             self.handleError(record)
 

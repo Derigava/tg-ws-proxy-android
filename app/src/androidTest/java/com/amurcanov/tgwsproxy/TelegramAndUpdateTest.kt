@@ -67,7 +67,7 @@ class TelegramAndUpdateTest {
         require(Regex("[A-Za-z0-9_./-]+").matches(directory))
         val file = File.createTempFile("signed-update-fixture-", ".apk", context.cacheDir)
         try {
-            val descriptor = instrumentation.uiAutomation.executeShellCommand("cat '$directory/$name.apk'")
+            val descriptor = instrumentation.uiAutomation.executeShellCommand("cat $directory/$name.apk")
             ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
                 file.outputStream().use { input.copyTo(it) }
             }

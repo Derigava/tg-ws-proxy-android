@@ -72,6 +72,7 @@ android {
     }
     // The archived Rust binaries are not part of the Python-based application.
     sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets"))
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 chaquopy {
@@ -117,3 +118,10 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
+
+val licenseNotices by tasks.registering(Sync::class) {
+    from(rootProject.file("LICENSE")) { rename { "ANDROID-GPL-3.0.txt" } }
+    from(rootProject.file("upstream/flowseal/LICENSE")) { rename { "Flowseal-MIT.txt" } }
+    into(layout.buildDirectory.dir("generated/licenseAssets/licenses"))
+}
+tasks.named("preBuild") { dependsOn(licenseNotices) }
