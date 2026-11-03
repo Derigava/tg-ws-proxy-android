@@ -8,10 +8,10 @@ spec.loader.exec_module(module)
 
 
 def test_accepts_complete_instrumentation_success():
-    assert module.validate_result("OK (14 tests)\nINSTRUMENTATION_CODE: -1\n") == 14
+    assert module.validate_result("OK (18 tests)\nINSTRUMENTATION_CODE: -1\n") == 18
 
 
-@pytest.mark.parametrize("output", ["FAILURES!!!\nTests run: 14, Failures: 1", "INSTRUMENTATION_STATUS_CODE: -2\nOK (14 tests)", "OK (0 tests)", "INSTRUMENTATION_FAILED: Process crashed", ""])
+@pytest.mark.parametrize("output", ["FAILURES!!!\nTests run: 18, Failures: 1", "INSTRUMENTATION_STATUS_CODE: -2\nOK (18 tests)", "OK (14 tests)", "OK (0 tests)", "INSTRUMENTATION_FAILED: Process crashed", ""])
 def test_rejects_failed_or_incomplete_runner_even_when_shell_exit_was_zero(output):
     with pytest.raises(ValueError):
         module.validate_result(output)

@@ -3,6 +3,10 @@ package com.amurcanov.tgwsproxy
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -49,6 +53,45 @@ data class AppReleaseInfo(
     val checksumsUrl: String
 )
 
+internal fun AppReleaseInfo.cacheJson(): String = JSONObject()
+    .put("versionTag", versionTag).put("releaseUrl", releaseUrl).put("versionCode", versionCode)
+    .put("apkName", apkName).put("apkUrl", apkUrl).put("apkSize", apkSize)
+    .put("sha256", sha256).put("checksumsUrl", checksumsUrl).toString()
+
+internal fun cachedReleaseInfo(json: String): AppReleaseInfo? = runCatching {
+    if (json.isBlank()) return@runCatching null
+    val value = JSONObject(json)
+    AppReleaseInfo(value.getString("versionTag"), value.getString("releaseUrl"),
+        versionCode = value.getLong("versionCode"), apkName = value.getString("apkName"),
+        apkUrl = value.getString("apkUrl"), apkSize = value.getLong("apkSize"),
+        sha256 = value.getString("sha256"), checksumsUrl = value.getString("checksumsUrl"))
+}.getOrNull()
+
+/** Serializes UI/background checks and reuses a fresh persisted result. */
+object AppUpdateRepository {
+    private val checkLock = Mutex()
+
+    suspend fun check(context: Context, force: Boolean = false): AppReleaseInfo? {
+        if (!BuildConfig.APP_UPDATES_ENABLED) return null
+        return checkLock.withLock {
+            val store = SettingsStore(context.applicationContext)
+            val hours = store.updateCheckIntervalHours.first()
+            if (!force && hours == UPDATE_CHECK_NEVER) return@withLock null
+            val interval = updateIntervalHoursToMillis(hours)
+                ?: updateIntervalHoursToMillis(DEFAULT_UPDATE_CHECK_INTERVAL_HOURS)!!
+            val checkedAt = System.currentTimeMillis()
+            val lastCheckAt = store.updateLastCheckAt.first()
+            if (!force && lastCheckAt > 0 && checkedAt - lastCheckAt < interval) {
+                return@withLock store.updateLatestRelease.first()
+            }
+            val release = fetchLatestReleaseInfo()
+            store.saveUpdateCheckResult(checkedAt, release,
+                if (release == null) context.getString(R.string.update_check_failed_short) else "")
+            release
+        }
+    }
+}
+
 enum class RemoteVersionSource { Release, Tag }
 const val UPDATE_DIALOG_ACTION_POSTPONED = "postponed"
 const val UPDATE_DIALOG_ACTION_UPDATE = "update"
@@ -84,6 +127,8 @@ suspend fun fetchLatestReleaseInfo(localVersion: String? = null): AppReleaseInfo
         AppReleaseInfo("v$versionName", releaseUrl, versionCode = versionCode,
             apkName = apkName, apkUrl = assetUrl(apkAsset), apkSize = apkSize,
             sha256 = sha256, checksumsUrl = assetUrl(checksumAsset))
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         Log.w("TgWsProxy", "Update check unavailable: ${e.javaClass.simpleName}")
         null

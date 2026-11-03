@@ -27,6 +27,8 @@ class ProxyService : Service() {
             ProxyTileService.requestSync(this)
         }
     private var stopping = false
+    private var pendingStart: ProxyConfiguration? = null
+    private var lastCommandId = 0
     private var needsEngineCleanup = true
     private var lastText = ""
 
@@ -63,15 +65,16 @@ class ProxyService : Service() {
         }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastCommandId = startId
         when (intent?.action) {
             ACTION_START -> start(ProxyConfiguration(
                 intent.getStringExtra(EXTRA_BIND_IP) ?: "127.0.0.1",
                 intent.getIntExtra(EXTRA_PORT, 1443), intent.getStringExtra(EXTRA_IPS) ?: "",
                 intent.getStringExtra(EXTRA_SECRET_KEY) ?: "", intent.getIntExtra(EXTRA_POOL_SIZE, 4),
                 intent.getBooleanExtra(EXTRA_CFPROXY_ENABLED, true), intent.getStringExtra(EXTRA_CFPROXY_DOMAIN) ?: ""))
-            ACTION_RESTART -> configuration?.let { restart(it) } ?: stopSelf()
+            ACTION_RESTART -> configuration?.let { restart(it) } ?: stopSelfResult(startId)
             ACTION_STOP -> stop()
-            else -> stopSelf()
+            else -> stopSelfResult(startId)
         }
         return START_REDELIVER_INTENT
     }
@@ -81,7 +84,14 @@ class ProxyService : Service() {
         else startForeground(NOTIFICATION, notification(text))
     }
     private fun start(config: ProxyConfiguration) {
-        if (starting || stopping || running.value) return
+        if (stopping) {
+            // The UI can request another start as soon as running becomes
+            // false, while the previous listener is still being closed.
+            pendingStart = config
+            Log.i("TgWsProxy", "Proxy start queued until cleanup completes")
+            return
+        }
+        if (starting || running.value) return
         configuration = config
         needsEngineCleanup = true
         starting = true
@@ -146,7 +156,10 @@ class ProxyService : Service() {
         stop(restart = config)
     }
     private fun stop(restart: ProxyConfiguration? = null) {
+        // A later explicit stop also cancels a queued start/restart.
+        pendingStart = restart
         if (stopping) return
+        val stopCommandId = lastCommandId
         val interruptStartup = starting
         stopping = true
         ++generation
@@ -171,8 +184,15 @@ class ProxyService : Service() {
             }
             releaseWakeLock()
             stopping = false
-            if (restart != null) start(restart)
-            else { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+            val next = pendingStart
+            pendingStart = null
+            if (next != null) start(next)
+            else {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                // Do not destroy this service if Android has already accepted
+                // a newer start command which has yet to reach onStartCommand.
+                stopSelfResult(stopCommandId)
+            }
         }
     }
     private fun update(text: String) {
@@ -200,6 +220,7 @@ class ProxyService : Service() {
     private fun releaseWakeLock() { wakeLock?.let { if (it.isHeld) it.release() }; wakeLock = null }
     override fun onTaskRemoved(rootIntent: Intent?) { super.onTaskRemoved(rootIntent) }
     override fun onDestroy() {
+        pendingStart = null
         ++generation
         scope.cancel()
         starting = false

@@ -63,7 +63,7 @@ class EngineInstrumentedTest {
         fun awaitCondition(check: () -> Boolean) {
             val deadline = System.currentTimeMillis() + 20_000
             while (!check() && System.currentTimeMillis() < deadline) Thread.sleep(50)
-            assertTrue("Service state did not settle", check())
+            assertTrue("Service state did not settle: starting=${ProxyService.isStarting.value}, running=${ProxyService.isRunning.value}, connection=${ProxyService.activeConnection.value?.port}", check())
         }
         try {
             repeat(2) {
@@ -79,8 +79,8 @@ class EngineInstrumentedTest {
                 assertEquals("dd1234567890abcdef1234567890abcdef", ProxyService.activeConnection.value?.secret)
                 context.startService(android.content.Intent(context, ProxyService::class.java).setAction(ProxyService.ACTION_STOP))
                 awaitCondition { !ProxyService.isRunning.value && ProxyService.activeConnection.value == null }
-                // Wait for asynchronous cleanup/stopSelf before the next start.
-                Thread.sleep(1000)
+                // Restart immediately while asynchronous cleanup may still be
+                // in progress: the next request must be retained, not dropped.
             }
         } finally {
             context.startService(android.content.Intent(context, ProxyService::class.java).setAction(ProxyService.ACTION_STOP))

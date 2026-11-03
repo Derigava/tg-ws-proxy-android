@@ -5,13 +5,15 @@ from pathlib import Path
 import re
 import subprocess
 
+MIN_ANDROID_TESTS = 18
+
 
 def validate_result(output: str) -> int:
     # am instrument may return shell exit code zero even when JUnit failed.
     if re.search(r"INSTRUMENTATION_STATUS_CODE: -\d+\b|FAILURES!!!|INSTRUMENTATION_FAILED", output):
         raise ValueError("Android instrumentation reported failures")
     match = re.search(r"^OK \((\d+) tests?\)\s*$", output, re.MULTILINE)
-    if not match or int(match[1]) < 14:
+    if not match or int(match[1]) < MIN_ANDROID_TESTS:
         raise ValueError("The complete Android test suite did not report success")
     return int(match[1])
 

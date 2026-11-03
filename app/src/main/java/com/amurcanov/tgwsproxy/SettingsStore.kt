@@ -48,6 +48,7 @@ class SettingsStore(private val context: Context) {
         val IS_EXPERIMENTAL_MODE = booleanPreferencesKey("is_experimental_mode")
         val UPDATE_LAST_CHECK_AT = longPreferencesKey("update_last_check_at")
         val UPDATE_LATEST_VERSION = stringPreferencesKey("update_latest_version")
+        val UPDATE_LATEST_RELEASE = stringPreferencesKey("update_latest_release_json")
         val UPDATE_LAST_ERROR = stringPreferencesKey("update_last_error")
         val UPDATE_CHECK_INTERVAL_HOURS = intPreferencesKey("update_check_interval_hours")
         val UPDATE_POSTPONE_UNTIL = longPreferencesKey("update_postpone_until")
@@ -94,6 +95,7 @@ class SettingsStore(private val context: Context) {
     val logShowNull: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_NULL] ?: false }
     val updateLastCheckAt: Flow<Long> = context.dataStore.data.map { it[Keys.UPDATE_LAST_CHECK_AT] ?: 0L }
     val updateLatestVersion: Flow<String> = context.dataStore.data.map { it[Keys.UPDATE_LATEST_VERSION] ?: "" }
+    val updateLatestRelease: Flow<AppReleaseInfo?> = context.dataStore.data.map { cachedReleaseInfo(it[Keys.UPDATE_LATEST_RELEASE].orEmpty()) }
     val updateLastError: Flow<String> = context.dataStore.data.map { it[Keys.UPDATE_LAST_ERROR] ?: "" }
     val updateCheckIntervalHours: Flow<Int> = context.dataStore.data.map {
         it[Keys.UPDATE_CHECK_INTERVAL_HOURS] ?: DEFAULT_UPDATE_CHECK_INTERVAL_HOURS
@@ -136,6 +138,19 @@ class SettingsStore(private val context: Context) {
             it[Keys.UPDATE_LAST_CHECK_AT] = lastCheckAt
             it[Keys.UPDATE_LATEST_VERSION] = latestVersion
             it[Keys.UPDATE_LAST_ERROR] = error
+        }
+    }
+
+    suspend fun saveUpdateCheckResult(lastCheckAt: Long, release: AppReleaseInfo?, error: String) {
+        context.dataStore.edit {
+            it[Keys.UPDATE_LAST_CHECK_AT] = lastCheckAt
+            it[Keys.UPDATE_LAST_ERROR] = error
+            // Keep the last known candidate on network failure, so it is still
+            // visible when the user opens the app while GitHub is unavailable.
+            if (release != null) {
+                it[Keys.UPDATE_LATEST_VERSION] = release.versionTag
+                it[Keys.UPDATE_LATEST_RELEASE] = release.cacheJson()
+            }
         }
     }
 

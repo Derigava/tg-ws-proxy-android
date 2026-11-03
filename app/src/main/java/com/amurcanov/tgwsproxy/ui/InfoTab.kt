@@ -93,7 +93,7 @@ import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_POSTPONED
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_UPDATE
 import com.amurcanov.tgwsproxy.ApkInstaller
 import com.amurcanov.tgwsproxy.PRIVATE_UPDATE_MESSAGE
-import com.amurcanov.tgwsproxy.fetchLatestReleaseInfo
+import com.amurcanov.tgwsproxy.AppUpdateRepository
 import com.amurcanov.tgwsproxy.isNewerVersion
 import kotlin.math.PI
 import kotlin.math.cos
@@ -153,10 +153,10 @@ fun InfoTab(settingsStore: SettingsStore) {
     val updateStatusSubtitle = when {
         !BuildConfig.APP_UPDATES_ENABLED -> "Закрытый тестовый канал · установка APK вручную"
         isCheckingUpdates -> stringResource(R.string.update_checking)
+        updateLastError.isNotBlank() -> stringResource(R.string.update_last_check_failed)
         updateLatestVersion.isNotBlank() && isNewerVersion(currentVersion, updateLatestVersion) ->
             stringResource(R.string.update_available_on_github, updateLatestVersion)
         updateLatestVersion.isNotBlank() -> stringResource(R.string.update_latest_version, updateLatestVersion)
-        updateLastError.isNotBlank() -> stringResource(R.string.update_last_check_failed)
         else -> stringResource(R.string.update_check_manually)
     }
     val reportText = buildSupportReport(
@@ -289,12 +289,7 @@ fun InfoTab(settingsStore: SettingsStore) {
                     isCheckingUpdates = true
                     scope.launch {
                         val checkedAt = System.currentTimeMillis()
-                        val release = fetchLatestReleaseInfo(currentVersion)
-                        settingsStore.saveUpdateState(
-                            lastCheckAt = checkedAt,
-                            latestVersion = release?.versionTag ?: "",
-                            error = if (release == null) context.getString(R.string.update_check_failed_short) else ""
-                        )
+                        val release = AppUpdateRepository.check(context, force = true)
                         isCheckingUpdates = false
 
                         if (release == null) {

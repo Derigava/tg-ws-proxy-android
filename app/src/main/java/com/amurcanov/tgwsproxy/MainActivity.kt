@@ -180,6 +180,7 @@ fun MainContent(settingsStore: SettingsStore) {
         initialValue = UPDATE_CHECK_NEVER
     )
     val updateLastCheckAt by settingsStore.updateLastCheckAt.collectAsStateWithLifecycle(initialValue = 0L)
+    val cachedRelease by settingsStore.updateLatestRelease.collectAsStateWithLifecycle(initialValue = null)
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var updateBusy by remember { mutableStateOf(false) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v")}" }
@@ -216,29 +217,20 @@ fun MainContent(settingsStore: SettingsStore) {
 
         if (!isActive) return@LaunchedEffect
 
-        val checkedAt = System.currentTimeMillis()
-        val release = fetchLatestReleaseInfo(currentVersion)
-        settingsStore.saveUpdateState(
-            lastCheckAt = checkedAt,
-            latestVersion = release?.versionTag ?: "",
-            error = if (release == null) context.getString(R.string.update_check_failed_short) else ""
-        )
+        AppUpdateRepository.check(context)
+    }
 
-        if (release == null) {
-            Log.w("TgWsProxy", "[WARN] Update check: no release info, local=$currentVersion")
-        } else {
-            val hasUpdate = release.versionCode > BuildConfig.VERSION_CODE
-            val isPostponed =
-                currentUpdatePostponeVersion == release.versionTag && checkedAt < currentUpdatePostponeUntil
-            Log.i(
-                "TgWsProxy",
-                "Update check: local=$currentVersion remote=${release.versionTag} newer=$hasUpdate postponed=$isPostponed"
-            )
-
-            if (hasUpdate && !isPostponed) {
-                settingsStore.saveUpdateDialogShown(release.versionTag, checkedAt)
-                pendingRelease = release
-            }
+    // A background worker can discover a release while no Activity exists.
+    // Show its persisted candidate when the UI next observes the result.
+    LaunchedEffect(cachedRelease, updatePostponeVersion, updatePostponeUntil, selectedTab) {
+        // InfoTab owns the explicit manual-check dialog; show just one popup.
+        if (!BuildConfig.APP_UPDATES_ENABLED || selectedTab == 3) return@LaunchedEffect
+        val release = cachedRelease ?: return@LaunchedEffect
+        val isPostponed = currentUpdatePostponeVersion == release.versionTag &&
+            System.currentTimeMillis() < currentUpdatePostponeUntil
+        if (release.versionCode > BuildConfig.VERSION_CODE && !isPostponed) {
+            settingsStore.saveUpdateDialogShown(release.versionTag, System.currentTimeMillis())
+            pendingRelease = release
         }
     }
 
