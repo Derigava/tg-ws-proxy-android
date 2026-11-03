@@ -29,26 +29,40 @@ def main():
             raise FileNotFoundError(path)
     def adb(*command):
         return subprocess.run(["adb", *map(str, command)], check=True, timeout=180)
-    adb("install", "-r", args.apk)
-    adb("install", "-r", args.test_apk)
-    adb("shell", "rm", "-rf", "/data/local/tmp/tgws-updater-fixtures")
-    adb("push", args.fixtures, "/data/local/tmp/")
-    result = subprocess.run(["adb", "shell", "am", "instrument", "-w", "-r", "-e", "expectedPageSize",
-        args.expected_page_size, "io.github.derigava.tgwsproxy.test/androidx.test.runner.AndroidJUnitRunner"],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=240)
     args.report.parent.mkdir(parents=True, exist_ok=True)
-    args.report.write_text(result.stdout, encoding="utf-8")
-    print(result.stdout)
-    result.check_returncode()
     try:
+        adb("install", "-r", args.apk)
+        adb("install", "-r", args.test_apk)
+        adb("shell", "rm", "-rf", "/data/local/tmp/tgws-updater-fixtures")
+        adb("push", args.fixtures, "/data/local/tmp/")
+        result = subprocess.run(["adb", "shell", "am", "instrument", "-w", "-r", "-e", "expectedPageSize",
+            args.expected_page_size, "io.github.derigava.tgwsproxy.test/androidx.test.runner.AndroidJUnitRunner"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=240)
+        args.report.write_text(result.stdout, encoding="utf-8")
+        print(result.stdout)
+        result.check_returncode()
         count = validate_result(result.stdout)
-    except ValueError:
-        crash = subprocess.run(["adb", "logcat", "-d", "-b", "crash", "-v", "threadtime"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=30)
-        args.report.with_suffix(".crash.txt").write_text(crash.stdout, encoding="utf-8")
-        print("Android crash buffer:\n" + crash.stdout[-20000:])
+    except Exception as failure:
+        if isinstance(failure, subprocess.TimeoutExpired) and failure.output:
+            partial = failure.output.decode("utf-8", errors="replace") if isinstance(failure.output, bytes) else failure.output
+            args.report.write_text(partial, encoding="utf-8")
+        diagnostics = {
+            "logcat": ["adb", "logcat", "-d", "-b", "all", "-v", "threadtime"],
+            "crash": ["adb", "logcat", "-d", "-b", "crash", "-v", "threadtime"],
+            "exit-info": ["adb", "shell", "dumpsys", "activity", "exit-info", "io.github.derigava.tgwsproxy"],
+        }
+        for name, command in diagnostics.items():
+            try:
+                diagnostic = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    text=True, encoding="utf-8", errors="replace", timeout=30)
+                args.report.with_suffix("." + name + ".txt").write_text(diagnostic.stdout, encoding="utf-8")
+                if name != "logcat":
+                    print(f"Android {name}:\n" + diagnostic.stdout[-20000:])
+            except Exception as error:
+                print(f"Could not collect {name}: {error}")
         raise
     print(f"Android gate passed: {count} tests; page size {args.expected_page_size}")
+
 
 
 if __name__ == "__main__":

@@ -199,7 +199,7 @@ jobs:
           ram-size: 2048M
           emulator-boot-timeout: 300
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-metrics
+          emulator-options: -no-window -no-snapshot -gpu software -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
             python scripts/run_android_tests.py --apk app/build/outputs/apk/emulator/debug/app-emulator-debug.apk --test-apk app/build/outputs/apk/androidTest/emulator/debug/app-emulator-debug-androidTest.apk --fixtures build/tgws-updater-fixtures --expected-page-size ${{ matrix.pages }} --report app/build/outputs/androidTest-results/api-${{ matrix.api }}.txt
       - name: Keep verification reports
