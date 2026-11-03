@@ -9,6 +9,12 @@
     <fields>;
 }
 
+# WorkManager's Room 2.6 database is instantiated through reflection. Its
+# consumer rule keeps the class name, but R8 full mode can remove this ctor.
+-keepclassmembers class androidx.work.impl.WorkDatabase_Impl {
+    public <init>();
+}
+
 # ─── Coroutines ───
 -dontwarn kotlinx.coroutines.**
 -keep class kotlinx.coroutines.** { *; }

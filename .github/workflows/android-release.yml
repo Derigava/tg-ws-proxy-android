@@ -175,9 +175,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build test packages before starting the emulator
         run: |
+          sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
           test_key="$RUNNER_TEMP/tgws-debug.jks"
           keytool -genkeypair -noprompt -keystore "$test_key" -storepass android -keypass android -alias androiddebugkey -dname 'CN=TGWS Android Tests' -keyalg RSA -keysize 2048 -validity 2 -storetype JKS
-          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PtestKeystore="$test_key" -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+          java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorRelease :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PtestKeystore="$test_key" -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
+          # Test the actual minified/shrunk release with an ephemeral test key.
+          # Production signing secrets are unavailable in this job.
+          mkdir -p build
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$test_key" --ks-pass pass:android --key-pass pass:android --ks-key-alias androiddebugkey --out build/tgws-emulator-release.apk app/build/outputs/apk/emulator/release/app-emulator-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify build/tgws-emulator-release.apk
+          python scripts/check_apk.py build/tgws-emulator-release.apk --abi x86_64
           python scripts/create_update_test_fixtures.py --sdk "$ANDROID_HOME" --output build/tgws-updater-fixtures --keystore "$test_key" --storepass android --alias androiddebugkey --version-code "$APP_VERSION_CODE"
           java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain --stop
       - name: Free SDK space for the test device
@@ -203,6 +210,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu software -noaudio -no-boot-anim -camera-back none -no-metrics
           script: |
+            python scripts/smoke_release.py --apk build/tgws-emulator-release.apk --report app/build/outputs/androidTest-results/release-smoke-api-${{ matrix.api }}.txt
             python scripts/run_android_tests.py --apk app/build/outputs/apk/emulator/debug/app-emulator-debug.apk --test-apk app/build/outputs/apk/androidTest/emulator/debug/app-emulator-debug-androidTest.apk --fixtures build/tgws-updater-fixtures --expected-page-size ${{ matrix.pages }} --report app/build/outputs/androidTest-results/api-${{ matrix.api }}.txt
       - name: Keep verification reports
         if: always()
