@@ -6,4 +6,5 @@ gradlew text eol=lf
 *.bat text eol=crlf
 *.ttf binary
 *.png binary
-upstream/flowseal/** -text
+upstream/flowseal/** -text linguist-vendored
+upstream/flowseal.lock.json linguist-vendored

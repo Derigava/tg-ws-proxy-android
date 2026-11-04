@@ -103,7 +103,8 @@ private fun AccessRow(row: AccessRowState, onClick: () -> Unit) {
     // Colour never works alone: each state has its own glyph.
     val (glyph, glyphColor) = when (row.granted) {
         true -> "[OK]" to Brand.accent
-        false -> "[!] " to Brand.alert
+        // Update installs are asked for at update time, so a missing grant is not a risk.
+        false -> if (row.item in SystemAccess.critical) "[!] " to Brand.alert else "//  " to Brand.muted
         null -> "//  " to Brand.muted
     }
     Row(
@@ -131,7 +132,8 @@ private fun AccessRow(row: AccessRowState, onClick: () -> Unit) {
 /** Shown once on first launch, and again from the warning on the proxy screen. */
 @Composable
 fun AccessSetupDialog(rows: List<AccessRowState>, onOpen: (SystemAccess.Item) -> Unit, onDone: () -> Unit) {
-    val allDone = rows.none { it.granted == false }
+    val setupRows = rows.filter { it.item != SystemAccess.Item.InstallUpdates }
+    val allDone = setupRows.none { it.granted == false }
     BrandDialog(
         onDismiss = onDone,
         modifier = Modifier.fillMaxWidth(0.92f)
@@ -142,7 +144,7 @@ fun AccessSetupDialog(rows: List<AccessRowState>, onOpen: (SystemAccess.Item) ->
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.access_intro), style = MaterialTheme.typography.bodyMedium, color = Brand.muted)
         Spacer(Modifier.height(16.dp))
-        AccessList(rows = rows, onOpen = onOpen)
+        AccessList(rows = setupRows, onOpen = onOpen)
         Spacer(Modifier.height(16.dp))
         if (allDone) {
             BrandButton(text = stringResource(R.string.done), onClick = onDone)

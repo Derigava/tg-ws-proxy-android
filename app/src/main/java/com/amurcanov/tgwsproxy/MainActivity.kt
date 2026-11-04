@@ -262,7 +262,7 @@ fun MainContent(settingsStore: SettingsStore) {
         }
     }
 
-    if (showAccessDialog || (!accessPromptShown && accessRows.any { it.granted == false })) {
+    if (showAccessDialog || (!accessPromptShown && accessRows.hasCriticalGap())) {
         AccessSetupDialog(
             rows = accessRows,
             onOpen = openAccess,
