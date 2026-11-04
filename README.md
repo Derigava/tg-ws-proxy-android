@@ -1,109 +1,119 @@
-# TG WS Proxy Android — Derigava
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.png">
+    <img src="docs/assets/banner-dark.png" alt="TG WS Proxy: локальный MTProto-прокси для Telegram на Android">
+  </picture>
+</p>
 
-Android-приложение для локального MTProto-прокси Telegram. Android-обвязка основана на [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android), движок — исходное Python-ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy), упакованное через Chaquopy.
+<p align="center">
+  <a href="https://github.com/Derigava/tg-ws-proxy-android/releases/latest"><img alt="Последний релиз" src="https://img.shields.io/github/v/release/Derigava/tg-ws-proxy-android?style=flat-square&label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=65D9E8&labelColor=0B151B"></a>
+  <a href="https://github.com/Derigava/tg-ws-proxy-android/actions/workflows/android-release.yml"><img alt="Проверки" src="https://img.shields.io/github/actions/workflow/status/Derigava/tg-ws-proxy-android/android-release.yml?branch=main&style=flat-square&label=CI&labelColor=0B151B"></a>
+  <a href="LICENSE"><img alt="Лицензия GPLv3" src="https://img.shields.io/badge/license-GPLv3-65D9E8?style=flat-square&labelColor=0B151B"></a>
+  <img alt="Android 7.0+ ARM64" src="https://img.shields.io/badge/Android-7.0%2B%20ARM64-65D9E8?style=flat-square&labelColor=0B151B">
+</p>
 
-Первый выпуск предназначен для **Android 7.0+ и ARM64**. Идентификатор приложения: `io.github.derigava.tgwsproxy`. Приложение устанавливается отдельно от архивной версии amurcanov; её настройки автоматически не импортируются.
+<p align="center"><a href="#english">English</a></p>
+
+TG WS Proxy поднимает на телефоне локальный MTProto-прокси, а Telegram подключается к нему как к обычному прокси. Root и VPN не нужны. Движок — исходное Python-ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) без изменений, Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
 
 ```text
-Telegram → локальный MTProto 127.0.0.1:1443 → ядро Flowseal → Telegram DC
+Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 ```
 
-## Установка и подключение
+| Запуск | Работает | Настройки | Логи |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/assets/screens/off.png" width="200" alt="Прокси выключен"> | <img src="docs/assets/screens/on.png" width="200" alt="Прокси запущен"> | <img src="docs/assets/screens/settings.png" width="200" alt="Настройки"> | <img src="docs/assets/screens/logs.png" width="200" alt="Логи"> |
 
-1. Скачать подписанный ARM64 APK из Releases этого репозитория и установить. Пока репозиторий приватный, для скачивания нужно войти в GitHub через браузер.
-2. Открыть приложение, разрешить уведомления и нажать на большой логотип Telegram, чтобы запустить прокси.
-3. Дождаться запуска локального прокси и нажать «Применить в Telegram».
-4. Если установлено несколько клиентов, выбрать нужный. Поддерживаются обе официальные сборки Telegram: из Play Market и с telegram.org.
-5. Подтвердить подключение внутри Telegram.
+## Установка
 
-Кнопка использует прямую ссылку `tg://proxy` и параметры уже запущенного прокси. Для ручного подключения доступны адрес, порт, секрет и копирование ссылки. После изменения настроек нужно перезапустить прокси, чтобы он начал использовать новые значения.
+1. Скачай `tgwsproxy-*-arm64.apk` из [последнего релиза](https://github.com/Derigava/tg-ws-proxy-android/releases/latest) и установи. Нужны Android 7.0+ и ARM64.
+2. Открой приложение и разреши то, что оно попросит: уведомления и работу без экономии заряда. Зачем это нужно, написано в разделе [«Доступы»](#доступы).
+3. Нажми кнопку со значком питания и дождись `[OK] ПОДКЛЮЧЕНО`.
+4. Нажми «Применить в Telegram» и подтверди подключение в клиенте. Если клиентов несколько, приложение спросит, какой открыть.
 
-На устройствах, агрессивно ограничивающих фоновые приложения, разрешить приложению работу в фоне в настройках Android. Прокси обслуживает Telegram и не является системным VPN; root не требуется.
+Для ручной настройки на главном экране есть адрес, порт, секрет и ссылка `tg://proxy`. После смены настроек перезапусти прокси.
 
-## Как устроены обновления
+## Доступы
 
-Исходники ядра находятся в `upstream/flowseal/proxy` **без изменений**. Файл `upstream/flowseal.lock.json` фиксирует стабильный тег, commit и SHA-256 всех файлов ядра, его тестов и лицензии. Начальная версия — Flowseal `v1.11.4`.
+| Что | Зачем | Что будет без этого |
+|---|---|---|
+| Уведомления | Показывают, что прокси запущен, и дают кнопки перезапуска и остановки | Прокси работает, но управлять им из шторки нельзя |
+| Без экономии заряда | Android не усыпляет прокси при выключенном экране | Telegram теряет соединение в фоне |
+| Автозапуск в прошивке | Xiaomi, Huawei, Honor, Oppo, realme, OnePlus, Vivo и Asus держат свой список. Строка появляется только на этих устройствах | Прошивка может завершить приложение. Статус прочитать нельзя, проверь вручную |
+| Установка обновлений | Ставит новые версии из приложения | Обновление придётся скачивать и ставить вручную |
 
-GitHub Actions проверяет стабильные релизы Flowseal каждые шесть часов. При появлении нового релиза автоматика:
+Текущее состояние видно в разделе «Настройки → Доступы». На Samsung отключения экономии заряда обычно хватает, но проверь, что приложения нет в списке спящих.
 
-1. Скачивает исходники по точному commit и готовит отдельного кандидата.
-2. Проверяет целостность, тесты протоколов Flowseal, Android-адаптер и вспомогательные утилиты.
-3. Собирает ARM64 APK и проверяет все нативные библиотеки на совместимость со страницами памяти 16 КБ.
-4. Устанавливает и открывает оптимизированную релизную сборку в эмуляторах API 24 и API 35 с 16 КБ, затем запускает набор Android-тестов. Сбой запуска релиза останавливает выпуск.
-5. Только после успеха подписывает готовый APK в отдельной задаче, сохраняет обновлённое ядро в истории и создаёт релиз с `update.json` и `SHA256SUMS`.
+## Обновления
 
-Если ядро меняет интерфейсы или становится несовместимым с Android-зависимостями, выпуск останавливается: рабочая версия не заменяется. Неизменившееся ядро при плановой проверке не создаёт нового релиза. Сбой проверки виден в Actions; мониторинг ошибок и сетевой доступ не гарантируются самим прокси.
+Приложение раз в 12 часов проверяет последний релиз через WorkManager. APK скачивается только после нажатия «Обновить». Перед установкой приложение сверяет размер, SHA-256 из `SHA256SUMS`, имя пакета, версию и сертификат подписи, а саму установку подтверждаешь в Android.
 
-Версия приложения и версия ядра отображаются отдельно. Автоматический `versionCode` равен `1000 + github.run_number`, версия приложения — `1.0.<run_number>`; локальная начальная сборка — `1.0.0` / `1000`. Существующий релиз при повторном запуске workflow не перезаписывается.
+Сертификат подписи, SHA-256:
 
-### Приватный этап
-
-Закрытый репозиторий и его Releases остаются приватными. Автосборка работает, тестовые APK устанавливаются вручную. Встроенное скачивание обновлений отключено, GitHub-токенов в приложении нет.
-
-Репозиторий автоматически публичным не становится. После решения владельца открыть его нужно запустить workflow **Android checks and releases → Run workflow**. Он выпустит сборку с включённым публичным каналом обновлений. Этот переходный APK устанавливается вручную один раз. Далее WorkManager проверяет релизы в фоне с интервалом 12 часов по умолчанию, включая время, когда окно приложения закрыто. Учитываются выбранный интервал и настройка «Никогда»; требуется подключение к сети, а Android может отложить запуск из-за энергосбережения. Найденная версия или ошибка сохраняется и видна при следующем открытии приложения. Ручная проверка остаётся доступной. Фоновая задача получает только описание релиза: APK скачивается после нажатия «Обновить», затем проверяются контрольная сумма, идентификатор приложения и сертификат подписи и открывается системное подтверждение установки Android.
-
-## Сборка и проверки
-
-Нужны JDK 21, Python 3.13, Android SDK platform 35 и build-tools 36.0.0. Kotlin-компиляция использует Java 17; NDK и Rust для нового движка не требуются. Python 3.13 должен находиться в PATH или определяться через `py -3.13` в Windows. SDK задаётся через `ANDROID_HOME` или локальный `local.properties`.
-
-Windows:
-
-```powershell
-py -3.13 -m pip install -r scripts/requirements-test.txt
-py -3.13 -m unittest discover -s tests/python -v
-py -3.13 -m unittest discover -s tests/scripts -v
-.\gradlew.bat :app:testArm64DebugUnitTest :app:assembleArm64Release
+```text
+6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
 ```
 
-Полный протокольный набор запускается в Linux (GitHub Actions или WSL). В Windows некоторые сетевые тесты Flowseal с короткими таймаутами не укладываются в отведённое время; их исходники и условия проверки не изменены.
+Проверить скачанный файл:
 
-Linux / GitHub Actions:
+```bash
+apksigner verify --print-certs tgwsproxy-*-arm64.apk
+```
+
+## Как выходят релизы
+
+Ядро лежит в `upstream/flowseal` без правок, а `upstream/flowseal.lock.json` фиксирует тег, commit и SHA-256 всех файлов. GitHub Actions каждые шесть часов проверяет стабильные релизы Flowseal. Новое ядро проходит такой путь:
+
+1. Python-тесты ядра и адаптера.
+2. Сборка ARM64 APK и проверка нативных библиотек на страницы памяти 16 КБ.
+3. Запуск оптимизированного релиза на эмуляторах API 24 и API 35 с 16 КБ, затем инструментальные тесты.
+4. Подпись в отдельной задаче, куда попадает только проверенный APK, и публикация релиза.
+
+Если что-то падает, релиз не выходит и рабочая версия остаётся на месте.
+
+## Сборка
+
+Нужны JDK 21, Python 3.13, Android SDK platform 35 и build-tools 36.0.0. SDK задаётся через `ANDROID_HOME` или `local.properties`.
 
 ```bash
 python -m pip install -r scripts/requirements-test.txt
 python scripts/run_python_tests.py
-java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleArm64Release
+./gradlew :app:assembleArm64Release
 ```
 
-Без ключа release-задача создаёт неподписанный APK. Для подписанной локальной сборки задать `TGWS_KEYSTORE_FILE`, `TGWS_KEYSTORE_PASSWORD`, `TGWS_KEY_ALIAS`, `TGWS_KEY_PASSWORD`. Ключ хранить вне репозитория и сохранять его резервную копию: следующие обновления должны подписываться тем же ключом.
+На Windows вместо `./gradlew` используй `gradlew.bat`, а Python-тесты запускай через `py -3.13 -m unittest discover -s tests/python` и `tests/scripts`: часть сетевых тестов Flowseal с короткими таймаутами в Windows не укладывается во время, поэтому полный набор идёт на Linux.
 
-Для автоматического выпуска добавить GitHub Actions Secrets:
+Без ключа получится неподписанный APK. Для подписи задай `TGWS_KEYSTORE_FILE`, `TGWS_KEYSTORE_PASSWORD`, `TGWS_KEY_ALIAS` и `TGWS_KEY_PASSWORD`. Проверить, что ядро не изменено:
 
-| Secret | Значение |
-| --- | --- |
-| `TGWS_KEYSTORE_BASE64` | Base64 содержимого постоянного keystore |
-| `TGWS_KEYSTORE_PASSWORD` | Пароль keystore |
-| `TGWS_KEY_ALIAS` | Псевдоним ключа |
-| `TGWS_KEY_PASSWORD` | Пароль ключа |
-
-Секреты подписи доступны только задаче подписи проверенного APK; Python-тесты, эмулятор и сборка исходников их не получают. Для GitHub Actions достаточно стандартного `GITHUB_TOKEN`; PAT не нужен. В приватном репозитории расходуется квота Actions владельца.
-
-Полезные команды:
-
-```powershell
-# Проверить, что исходники ядра не изменены:
-py -3.13 scripts/sync_upstream.py --check
-# Получить конкретный стабильный релиз ядра:
-py -3.13 scripts/sync_upstream.py --ref v1.11.4
-# Получить последний стабильный релиз (меняет vendor и lock):
-py -3.13 scripts/sync_upstream.py
-# Проверить нативные библиотеки итогового APK:
-py -3.13 scripts/check_apk.py <путь-к-arm64.apk>
+```bash
+python scripts/sync_upstream.py --check
 ```
 
-## Проверка на телефоне
+## Что важно знать
 
-После установки тестового APK проверить:
+- Приложение неофициальное и не связано с Telegram.
+- Это прокси для Telegram, а не системный VPN: другой трафик через него не идёт.
+- Прокси слушает `127.0.0.1`, поэтому доступен только на этом телефоне. Адрес `0.0.0.0` в настройках открывает его всей локальной сети.
+- Работа зависит от маршрута, DNS и провайдера. Если подключение висит, перезапусти прокси и сравни с включённым и выключенным Cloudflare.
+- Нашёл ошибку — приложи отчёт из «Инфо → Собрать отчёт», секрета в нём нет. Об уязвимостях пиши по правилам из [SECURITY.md](SECURITY.md).
 
-- запуск, остановку и повторный запуск прокси;
-- «Применить» в установленной официальной версии Telegram, включая сборку с telegram.org;
-- отправку и получение сообщений, фото и видео;
-- работу после выключения экрана и возвращения в приложение;
-- переключение Wi-Fi ↔ мобильная сеть;
-- сохранение настроек после установки следующего подписанного APK.
+## Лицензии и авторы
 
-Эмуляторные и протокольные тесты не подтверждают доступность обхода у конкретного оператора. Её нужно проверить на реальном телефоне и сети.
+- Android-приложение: [GPLv3](LICENSE). Основа — [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android), история коммитов сохранена.
+- Ядро: [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy).
+- Шрифты Unbounded, Onest и JetBrains Mono: [SIL OFL 1.1](licenses/fonts).
+- Знак `derigava_█` не передаётся вместе с кодом, подробности в [NOTICE.md](NOTICE.md).
 
-## Лицензия и происхождение
+---
 
-Android-обвязка и изменения этого проекта распространяются под **GPLv3**; см. `LICENSE`. Исходное ядро Flowseal сохраняет **MIT License**, см. `upstream/flowseal/LICENSE`. История Android-проекта сохранена. Старый Rust/Go-код остаётся в истории/исходниках для происхождения, но его библиотеки в новый APK не включаются.
+## English
+
+TG WS Proxy runs a local MTProto proxy on your phone, and Telegram connects to it like any other proxy. No root or VPN needed. The engine is the unmodified Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy); the Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
+
+1. Download `tgwsproxy-*-arm64.apk` from the [latest release](https://github.com/Derigava/tg-ws-proxy-android/releases/latest). It needs Android 7.0+ and ARM64.
+2. Open the app and allow notifications and running without battery optimization, so Android doesn't stop the proxy with the screen off.
+3. Tap the power button and wait for `[OK] CONNECTED`.
+4. Tap "Apply in Telegram" and confirm in the client.
+
+The in-app updater checks the latest release every 12 hours. It verifies the size, SHA-256, package name, version and signing certificate before Android asks you to confirm the install. The app is unofficial and not affiliated with Telegram. Switch the language in Settings.

@@ -16,7 +16,6 @@ import java.net.URL
 
 const val UPDATE_CHECK_NEVER = -1
 const val DEFAULT_UPDATE_CHECK_INTERVAL_HOURS = 12
-const val PRIVATE_UPDATE_MESSAGE = "Тестовая сборка: репозиторий закрыт. APK устанавливается вручную из GitHub."
 private const val RELEASE_API = "https://api.github.com/repos/Derigava/tg-ws-proxy-android/releases/latest"
 private const val RELEASE_PREFIX = "https://github.com/Derigava/tg-ws-proxy-android/releases/"
 

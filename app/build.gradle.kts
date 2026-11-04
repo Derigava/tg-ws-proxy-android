@@ -79,7 +79,7 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         jniLibs.useLegacyPackaging = false
     }
-    // The archived Rust binaries are not part of the Python-based application.
+    // Old local builds may leave Rust binaries here; the Python-based application never ships them.
     sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets").get().asFile)
     testOptions { unitTests.isReturnDefaultValues = true }
@@ -132,6 +132,7 @@ dependencies {
 val licenseNotices by tasks.registering(Sync::class) {
     from(rootProject.file("LICENSE")) { rename { "ANDROID-GPL-3.0.txt" } }
     from(rootProject.file("upstream/flowseal/LICENSE")) { rename { "Flowseal-MIT.txt" } }
+    from(rootProject.file("licenses/fonts"))
     into(layout.buildDirectory.dir("generated/licenseAssets/licenses"))
 }
 tasks.named("preBuild") { dependsOn(licenseNotices) }

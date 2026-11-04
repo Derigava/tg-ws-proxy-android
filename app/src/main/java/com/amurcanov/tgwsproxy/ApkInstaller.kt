@@ -19,15 +19,15 @@ import java.io.File
 import java.security.MessageDigest
 import kotlin.coroutines.coroutineContext
 
-/** No account token is shipped in APKs. Private builds never contact the update service. */
+/** No account token is shipped in APKs. Builds without the update channel never contact the update service. */
 object ApkInstaller {
     private val downloadLock = Mutex()
 
     suspend fun prepare(context: Context, release: AppReleaseInfo): File = withContext(Dispatchers.IO) {
-        check(BuildConfig.APP_UPDATES_ENABLED) { PRIVATE_UPDATE_MESSAGE }
+        check(BuildConfig.APP_UPDATES_ENABLED) { context.getString(R.string.update_disabled_message) }
         downloadLock.withLock {
             val checksums = readUpdateText(release.checksumsUrl)
-            require(checksumMatches(checksums, release.apkName, release.sha256)) { "Контрольная сумма отсутствует в SHA256SUMS" }
+            require(checksumMatches(checksums, release.apkName, release.sha256)) { context.getString(R.string.update_error_checksum_missing) }
             val directory = File(context.cacheDir, "updates").apply { mkdirs() }
             val target = File(directory, "update-${release.versionCode}.apk")
             if (target.isFile && runCatching { verifyArchive(context, target, release) }.isSuccess) return@withLock target
@@ -35,7 +35,7 @@ object ApkInstaller {
             val partial = File(directory, "update-${release.versionCode}.part")
             val connection = openUpdateConnection(release.apkUrl)
             try {
-                require(connection.responseCode in 200..299) { "Не удалось скачать обновление" }
+                require(connection.responseCode in 200..299) { context.getString(R.string.update_error_download) }
                 var count = 0L
                 connection.inputStream.use { input ->
                     partial.outputStream().use { output ->
@@ -45,14 +45,14 @@ object ApkInstaller {
                             val size = input.read(buffer)
                             if (size < 0) break
                             count += size
-                            require(count <= MAX_UPDATE_APK_BYTES && count <= release.apkSize) { "Неверный размер APK" }
+                            require(count <= MAX_UPDATE_APK_BYTES && count <= release.apkSize) { context.getString(R.string.update_error_size) }
                             output.write(buffer, 0, size)
                         }
                     }
                 }
-                require(count == release.apkSize) { "APK скачан не полностью" }
+                require(count == release.apkSize) { context.getString(R.string.update_error_incomplete) }
                 verifyArchive(context, partial, release)
-                check(partial.renameTo(target)) { "Не удалось сохранить APK" }
+                check(partial.renameTo(target)) { context.getString(R.string.update_error_save) }
                 target
             } finally {
                 connection.disconnect()
@@ -67,7 +67,7 @@ object ApkInstaller {
     }
 
     internal fun verifyArchive(context: Context, apk: File, release: AppReleaseInfo) {
-        require(apk.length() == release.apkSize) { "Неверный размер APK" }
+        require(apk.length() == release.apkSize) { context.getString(R.string.update_error_size) }
         val digest = MessageDigest.getInstance("SHA-256")
         apk.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
@@ -78,19 +78,19 @@ object ApkInstaller {
             }
         }
         val expected = release.sha256.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-        require(MessageDigest.isEqual(digest.digest(), expected)) { "Контрольная сумма APK не совпадает" }
+        require(MessageDigest.isEqual(digest.digest(), expected)) { context.getString(R.string.update_error_checksum) }
         val pm = context.packageManager
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
         @Suppress("DEPRECATION")
-        val archive = pm.getPackageArchiveInfo(apk.absolutePath, flags) ?: error("APK не распознан Android")
+        val archive = pm.getPackageArchiveInfo(apk.absolutePath, flags) ?: error(context.getString(R.string.update_error_unrecognized))
         @Suppress("DEPRECATION")
         val installed = pm.getPackageInfo(context.packageName, flags)
-        require(archive.packageName == context.packageName) { "APK другого приложения" }
-        require(PackageInfoCompat.getLongVersionCode(archive) == release.versionCode) { "Версия APK не совпадает с описанием" }
-        require(release.versionCode > PackageInfoCompat.getLongVersionCode(installed)) { "Обновление уже установлено" }
+        require(archive.packageName == context.packageName) { context.getString(R.string.update_error_package) }
+        require(PackageInfoCompat.getLongVersionCode(archive) == release.versionCode) { context.getString(R.string.update_error_version) }
+        require(release.versionCode > PackageInfoCompat.getLongVersionCode(installed)) { context.getString(R.string.update_error_installed) }
         val currentSigners = signerDigests(installed)
         val downloadedSigners = signerDigests(archive)
-        require(currentSigners.isNotEmpty() && currentSigners == downloadedSigners) { "APK подписан другим ключом" }
+        require(currentSigners.isNotEmpty() && currentSigners == downloadedSigners) { context.getString(R.string.update_error_signature) }
     }
 
     @Suppress("DEPRECATION")
@@ -104,7 +104,7 @@ object ApkInstaller {
     /** Returns false when Android first needs permission; tap Update again after granting it. */
     fun install(context: Context, apk: File): Boolean {
         if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(context, "Разрешите установку из этого приложения, затем снова нажмите «Обновить».", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, R.string.update_allow_install, Toast.LENGTH_LONG).show()
             context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
             return false
         }

@@ -52,9 +52,9 @@ class TelegramAndUpdateTest {
             assertNotNull("Unsigned non-APK file must not reach the installer", unsignedError)
             assertTrue(unsignedError?.message.orEmpty().contains("APK"))
             val checksumError = runCatching { ApkInstaller.verifyArchive(context, file, release.copy(sha256 = "0".repeat(64))) }.exceptionOrNull()
-            assertTrue(checksumError?.message.orEmpty().contains("сумма"))
+            assertTrue(checksumError?.message.orEmpty() == context.getString(R.string.update_error_checksum))
             val sizeError = runCatching { ApkInstaller.verifyArchive(context, file, release.copy(apkSize = contents.size + 1L)) }.exceptionOrNull()
-            assertTrue(sizeError?.message.orEmpty().contains("размер"))
+            assertTrue(sizeError?.message.orEmpty() == context.getString(R.string.update_error_size))
         } finally { file.delete() }
     }
 
@@ -89,22 +89,22 @@ class TelegramAndUpdateTest {
 
     @Test fun rejectsApkSignedWithAnotherKey() = withFixture("wrong-key") { apk, release ->
         val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
-        assertTrue("Foreign signer must be rejected after hash/package/version validation", error?.message.orEmpty().contains("другим ключом"))
+        assertTrue("Foreign signer must be rejected after hash/package/version validation", error?.message.orEmpty() == InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.update_error_signature))
     }
 
     @Test fun rejectsApkForAnotherPackage() = withFixture("wrong-package") { apk, release ->
         val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
-        assertTrue(error?.message.orEmpty().contains("другого приложения"))
+        assertTrue(error?.message.orEmpty() == InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.update_error_package))
     }
 
     @Test fun rejectsAlreadyInstalledVersion() = withFixture("same-version") { apk, release ->
         val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release) }.exceptionOrNull()
-        assertTrue(error?.message.orEmpty().contains("уже установлено"))
+        assertTrue(error?.message.orEmpty() == InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.update_error_installed))
     }
 
     @Test fun rejectsVersionMetadataMismatch() = withFixture("valid") { apk, release ->
         val error = runCatching { ApkInstaller.verifyArchive(InstrumentationRegistry.getInstrumentation().targetContext, apk, release.copy(versionCode = release.versionCode + 1)) }.exceptionOrNull()
-        assertTrue(error?.message.orEmpty().contains("Версия APK"))
+        assertTrue(error?.message.orEmpty() == InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.update_error_version))
     }
 
     @Test fun releaseVersionComparisonHandlesMissingSegments() {

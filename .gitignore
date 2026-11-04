@@ -14,7 +14,7 @@ captures/
 *.aab
 *.ap_
 
-# Native libs собираются из Rust через build_so.bat / CI — не коммитим бинарники
+# Бинарники старых локальных сборок, в APK не попадают
 app/src/main/jniLibs/
 
 # Локальная конфигурация и секреты — НЕ коммитить
@@ -23,10 +23,6 @@ local.properties
 *.keystore
 release.keystore
 gradle/gradle-daemon-jvm.properties
-
-# Rust
-target/
-**/*.rs.bk
 
 # IDE / OS
 .idea/
