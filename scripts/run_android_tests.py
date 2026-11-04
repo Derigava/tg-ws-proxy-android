@@ -30,7 +30,8 @@ def main():
         if not path.exists():
             raise FileNotFoundError(path)
     def adb(*command):
-        return subprocess.run(["adb", *map(str, command)], check=True, timeout=180)
+        # Installing a large APK on a CI emulator without KVM headroom can take minutes.
+        return subprocess.run(["adb", *map(str, command)], check=True, timeout=300)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     try:
         adb("install", "-r", args.apk)
