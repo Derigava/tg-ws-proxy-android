@@ -118,7 +118,9 @@ def main() -> None:
         if sdk >= 33:
             adb("shell", "pm", "grant", args.package, "android.permission.POST_NOTIFICATIONS")
         adb("shell", "am", "force-stop", args.package)
-        adb("logcat", "-b", "all", "-c")
+        # Android 7 restricts privileged buffers selected by "all". Clear only
+        # the application/error buffers which this gate actually inspects.
+        adb("logcat", "-b", "main", "-b", "system", "-b", "crash", "-b", "events", "-c")
         started = time.monotonic()
         launch_output = adb("shell", "am", "start", "-W", "-n", f"{args.package}/{args.activity}",
                             check=False, timeout=int(args.startup_timeout)).stdout
@@ -170,15 +172,19 @@ def main() -> None:
                                  diagnostics.get("logcat", ""), args.package)
             except Exception as error:
                 failure = error
-        status = "PASSED" if failure is None else f"FAILED: {failure}"
+        details = str(failure)
+        if isinstance(failure, subprocess.CalledProcessError) and failure.stdout:
+            details += "\n" + str(failure.stdout)[-4000:]
+        status = "PASSED" if failure is None else f"FAILED: {details}"
         args.report.write_text(
             f"Release smoke {status}\nPackage: {args.package}\n\n{launch_output}\n"
             f"Process observations: {[sorted(value) for value in observations]}\n\n{activities}\n",
             encoding="utf-8")
         print(f"Release smoke {status}")
-        if installed_by_smoke and not args.keep_installed:
-            # Leave a clean target for the following debug instrumentation suite.
-            adb("uninstall", args.package)
+        if installed_by_smoke:
+            adb("shell", "am", "force-stop", args.package, check=False)
+            if not args.keep_installed:
+                adb("uninstall", args.package)
     if failure is not None:
         raise failure
 

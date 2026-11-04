@@ -209,8 +209,10 @@ jobs:
           emulator-boot-timeout: 300
           disable-animations: true
           emulator-options: -no-window -no-snapshot -gpu software -noaudio -no-boot-anim -camera-back none -no-metrics
+          # Both variants use the same temporary signing key. Keep the release
+          # so the instrumentation suite also exercises installation over it.
           script: |
-            python scripts/smoke_release.py --apk build/tgws-emulator-release.apk --report app/build/outputs/androidTest-results/release-smoke-api-${{ matrix.api }}.txt
+            python scripts/smoke_release.py --apk build/tgws-emulator-release.apk --keep-installed --report app/build/outputs/androidTest-results/release-smoke-api-${{ matrix.api }}.txt
             python scripts/run_android_tests.py --apk app/build/outputs/apk/emulator/debug/app-emulator-debug.apk --test-apk app/build/outputs/apk/androidTest/emulator/debug/app-emulator-debug-androidTest.apk --fixtures build/tgws-updater-fixtures --expected-page-size ${{ matrix.pages }} --report app/build/outputs/androidTest-results/api-${{ matrix.api }}.txt
       - name: Keep verification reports
         if: always()
