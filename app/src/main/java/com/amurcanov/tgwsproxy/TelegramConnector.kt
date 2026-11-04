@@ -33,7 +33,7 @@ object TelegramConnector {
             .distinctBy { it.activityInfo.packageName }
             .sortedBy { it.loadLabel(pm).toString().lowercase() }
         if (clients.isEmpty()) {
-            Toast.makeText(context, "Telegram не найден. Установите клиент или скопируйте реквизиты прокси.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, R.string.telegram_not_found, Toast.LENGTH_LONG).show()
             return
         }
         val preferences = context.getSharedPreferences("telegram_client", Context.MODE_PRIVATE)
@@ -44,9 +44,9 @@ object TelegramConnector {
                 preferences.edit().putString("package", packageName).apply()
             } catch (_: ActivityNotFoundException) {
                 preferences.edit().remove("package").apply()
-                Toast.makeText(context, "Клиент недоступен. Выберите другой Telegram.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, R.string.telegram_client_unavailable, Toast.LENGTH_LONG).show()
             } catch (_: SecurityException) {
-                Toast.makeText(context, "Не удалось открыть Telegram.", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, R.string.telegram_open_failed, Toast.LENGTH_LONG).show()
             }
         }
         val remembered = clients.firstOrNull { it.activityInfo.packageName == saved }
@@ -54,11 +54,11 @@ object TelegramConnector {
             clients.size == 1 -> launch(clients.first().activityInfo.packageName)
             remembered != null && !chooseAgain -> launch(remembered.activityInfo.packageName)
             else -> AlertDialog.Builder(context)
-                .setTitle("Выберите Telegram")
+                .setTitle(R.string.telegram_choose)
                 .setItems(clients.map { "${it.loadLabel(pm)} (${it.activityInfo.packageName})" }.toTypedArray()) { _, index ->
                     launch(clients[index].activityInfo.packageName)
                 }
-                .setNegativeButton("Отмена", null)
+                .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }
     }

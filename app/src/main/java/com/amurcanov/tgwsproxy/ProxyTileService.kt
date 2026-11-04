@@ -16,6 +16,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class ProxyTileService : TileService() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withAppLanguage())
+    }
+
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var listenJob: Job? = null
@@ -71,8 +75,8 @@ class ProxyTileService : TileService() {
 
     private fun renderTile(overrideState: Int? = null) {
         qsTile?.apply {
-            label = "Telegram WS Proxy"
-            icon = Icon.createWithResource(this@ProxyTileService, R.drawable.ic_qs_proxy_t)
+            label = getString(R.string.app_name)
+            icon = Icon.createWithResource(this@ProxyTileService, R.drawable.ic_mark_mono)
             state = overrideState ?: when {
                 ProxyService.isStarting.value -> Tile.STATE_UNAVAILABLE
                 ProxyService.isRunning.value -> Tile.STATE_ACTIVE

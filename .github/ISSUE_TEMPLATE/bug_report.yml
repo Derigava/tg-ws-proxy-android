@@ -1,0 +1,32 @@
+name: Ошибка
+description: Приложение работает не так, как должно
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что ты делал, что ожидал и что получилось.
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Отчёт из приложения
+      description: Открой «Инфо → Собрать отчёт» и вставь текст сюда. Секрета в нём нет. В логах и на скриншотах проверь, что не видно секрета и личных данных.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: network
+    attributes:
+      label: Сеть
+      description: Например, Wi-Fi или мобильная сеть и оператор. Проблема часто зависит от маршрута.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Обновился до последнего релиза
+          required: true
+        - label: Сравнил работу с включённым и выключенным Cloudflare

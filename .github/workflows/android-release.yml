@@ -25,6 +25,19 @@ env:
   PYTHON_VERSION: '3.13'
 
 jobs:
+  keepalive:
+    # GitHub turns schedules off after 60 days without activity in a public
+    # repository, and a quiet upstream would silently stop the core updates.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/android-release.yml/enable"
+
   prepare:
     runs-on: ubuntu-24.04
     outputs:
@@ -104,10 +117,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Python runtime and integrity checks
         run: |
           python -m pip install -r scripts/requirements-test.txt
@@ -169,10 +182,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Build test packages before starting the emulator
         run: |
           sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
@@ -198,7 +211,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Android runtime and lifecycle tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: ${{ matrix.api }}
           target: ${{ matrix.target }}
@@ -256,7 +269,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: platform-tools
       - name: Ensure release still targets the tested main revision
@@ -302,8 +315,8 @@ jobs:
             echo "Release $tag already exists; refusing to replace an installed version."
             exit 1
           fi
-          printf 'Flowseal core: %s\nAndroid versionCode: %s\n\nBuilt from the pinned source after Python, JVM, Android 16 KB and ARM64 binary checks.\nPrivate repositories require an authenticated browser to download test APKs.\n' \
-            "$CORE_VERSION" "$APP_VERSION_CODE" > "$RUNNER_TEMP/release-notes.md"
+          printf 'Ядро Flowseal: %s\nAndroid versionCode: %s\n\nСобрано из зафиксированных исходников после проверок Python, JVM, Android 16 КБ и бинарников ARM64.\nСкачай APK ниже и установи поверх текущей версии. Контрольная сумма лежит в SHA256SUMS.\n\nFlowseal core: %s. Download the APK below and install it over the current version.\n' \
+            "$CORE_VERSION" "$APP_VERSION_CODE" "$CORE_VERSION" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
             --target "$(git rev-parse HEAD)" --title "TG WS Proxy Android $APP_VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
