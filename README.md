@@ -100,7 +100,7 @@ python scripts/sync_upstream.py --check
 
 ## Лицензии и авторы
 
-- Android-приложение: [GPLv3](LICENSE). Основа — [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android), история коммитов сохранена.
+- Android-приложение: [GPLv3](LICENSE). Проект основан на работе amurcanov. Поскольку оригинальный репозиторий сейчас архивирован, я продолжаю развивать Android-реализацию, исправлять проблемы, описанные в Issues, и поддерживать совместимость с актуальным ядром Flowseal, история коммитов сохранена.
 - Ядро: [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy).
 - Шрифты Unbounded, Onest и JetBrains Mono: [SIL OFL 1.1](licenses/fonts).
 - Знак `derigava_█` не передаётся вместе с кодом, подробности в [NOTICE.md](NOTICE.md).
