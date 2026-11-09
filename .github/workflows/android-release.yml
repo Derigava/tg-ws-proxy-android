@@ -58,6 +58,7 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           SYNC: ${{ inputs.sync_upstream }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if [[ "$EVENT" == "schedule" || ( "$EVENT" == "workflow_dispatch" && "$SYNC" != "false" ) ]]; then
             python scripts/sync_upstream.py
