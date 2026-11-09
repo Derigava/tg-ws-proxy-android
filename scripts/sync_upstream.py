@@ -21,8 +21,15 @@ VENDOR = ROOT / "upstream/flowseal"
 
 
 def fetch(url: str) -> bytes:
-    # Public upstream reads never use a repository or release-signing credential.
-    request = urllib.request.Request(url, headers={"User-Agent": "Derigava-TgWsProxy-sync", "Accept": "application/vnd.github+json"})
+    headers = {
+        "User-Agent": "Derigava-TgWsProxy-sync",
+        "Accept": "application/vnd.github+json",
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token and urllib.parse.urlparse(url).hostname == "api.github.com":
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
 
