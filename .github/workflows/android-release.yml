@@ -5,7 +5,8 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: '17 */6 * * *'
+    # Flowseal ships every ~8 days, hotfixes within hours; daily keeps the lag under a day.
+    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       sync_upstream:

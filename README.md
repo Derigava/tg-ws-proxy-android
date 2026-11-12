@@ -84,7 +84,7 @@ apksigner verify --print-certs tgwsproxy-*-arm64.apk
 
 ## Как выходят релизы
 
-Ядро лежит в `upstream/flowseal` без правок, а `upstream/flowseal.lock.json` фиксирует тег, commit и SHA-256 всех файлов. GitHub Actions каждые шесть часов проверяет стабильные релизы Flowseal. Новое ядро проходит такой путь:
+Ядро лежит в `upstream/flowseal` без правок, а `upstream/flowseal.lock.json` фиксирует тег, commit и SHA-256 всех файлов. GitHub Actions раз в сутки проверяет стабильные релизы Flowseal. Новое ядро проходит такой путь:
 
 1. Python-тесты ядра и адаптера.
 2. Сборка ARM64 APK и проверка нативных библиотек на страницы памяти 16 КБ.
