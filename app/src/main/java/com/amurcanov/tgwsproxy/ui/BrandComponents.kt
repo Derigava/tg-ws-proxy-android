@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -321,6 +322,7 @@ fun BrandField(
     keyboardType: KeyboardType = KeyboardType.Text,
     textStyle: TextStyle = MonoValueStyle,
     enabled: Boolean = true,
+    placeholder: String? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -342,6 +344,9 @@ fun BrandField(
                     .then(if (focused) Modifier.border(1.dp, Brand.accent) else Modifier)
                     .padding(horizontal = 12.dp, vertical = 14.dp)
             ) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, style = textStyle, color = Brand.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 inner()
             }
         }

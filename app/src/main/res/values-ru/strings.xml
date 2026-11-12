@@ -157,4 +157,18 @@
     <string name="interval_never">Никогда</string>
     <string name="interval_hours">%1$d ч</string>
     <string name="port_is_not_available">Порт %1$d занят, попробуй другой</string>
+    <string name="own_cloudflare">Свой Cloudflare</string>
+    <string name="cf_proxy_domains">Домены CF-прокси</string>
+    <string name="cf_proxy_domains_hint">Свои домены перед CF-прокси, через запятую. Пусто — общий список.</string>
+    <string name="cf_proxy_domains_needs_cdn">Чтобы задать свои домены, включи CloudFlare CDN.</string>
+    <string name="cf_worker_domains">CF Worker</string>
+    <string name="cf_worker_domains_hint">Домены своих воркеров через запятую. Пробуются первыми, до CF-прокси и прямого подключения, и работают даже при выключенном CloudFlare CDN.</string>
+    <string name="invalid_domain">Не домен: %1$s</string>
+    <string name="report_cf_worker">CF Worker: включён (%1$d)</string>
+    <string name="shortcut_start">Запустить прокси</string>
+    <string name="shortcut_stop">Остановить прокси</string>
+    <string name="share_log">Поделиться журналом</string>
+    <string name="share_log_subtitle">Весь журнал за последние часы одним файлом</string>
+    <string name="share_log_empty">Журнал пуст: сначала запусти прокси</string>
+    <string name="report_journal_errors">Ошибки и события за 24 ч:</string>
 </resources>

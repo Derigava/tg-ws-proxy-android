@@ -34,6 +34,27 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 
 Для ручной настройки на главном экране есть адрес, порт, секрет и ссылка `tg://proxy`. После смены настроек перезапусти прокси.
 
+## Свой Cloudflare
+
+В «Настройки → Свой Cloudflare» два поля, оба принимают несколько доменов через запятую:
+
+- **Домены CF-прокси** заменяют общий список доменов. Работают при включённом CloudFlare CDN.
+- **CF Worker** — домены твоих [воркеров](https://github.com/Flowseal/tg-ws-proxy). Ядро пробует их первым, до CF-прокси и прямого подключения, даже при выключенном CloudFlare CDN. Свой воркер не делит квоту с другими пользователями.
+
+В отчёт для issue попадает только число воркеров, сами домены нет.
+
+## Управление без интерфейса
+
+Долгое нажатие на иконку даёт ярлыки «Запустить прокси» и «Остановить прокси». Их можно вынести на рабочий стол или повесить на жест. Есть ещё плитка в шторке. Приложения автоматизации (MacroDroid, Tasker) запускают активность `com.amurcanov.tgwsproxy.ProxyShortcutActivity` пакета `io.github.derigava.tgwsproxy` с действием:
+
+| Действие | Что делает |
+|---|---|
+| `io.github.derigava.tgwsproxy.action.START` | Запускает прокси с сохранёнными настройками |
+| `io.github.derigava.tgwsproxy.action.STOP` | Останавливает прокси |
+| `io.github.derigava.tgwsproxy.action.TOGGLE` | Переключает |
+
+Так можно, например, включать прокси при открытии Telegram и выключать при выходе.
+
 ## Доступы
 
 | Что | Зачем | Что будет без этого |
@@ -96,7 +117,8 @@ python scripts/sync_upstream.py --check
 - Это прокси для Telegram, а не системный VPN: другой трафик через него не идёт.
 - Прокси слушает `127.0.0.1`, поэтому доступен только на этом телефоне. Адрес `0.0.0.0` в настройках открывает его всей локальной сети.
 - Работа зависит от маршрута, DNS и провайдера. Если подключение висит, перезапусти прокси и сравни с включённым и выключенным Cloudflare.
-- Нашёл ошибку — приложи отчёт из «Инфо → Собрать отчёт», секрета в нём нет. Об уязвимостях пиши по правилам из [SECURITY.md](SECURITY.md).
+- При сбое переключения сети или пропаже интернета прокси сам сбрасывает накопленные задержки маршрутов, перезапуск не нужен.
+- Нашёл ошибку — приложи отчёт из «Инфо → Собрать отчёт», секрета в нём нет. В нём ошибки и события за 24 часа из журнала, который ведётся и в фоне. Для долгих отвалов приложи файл из «Инфо → Поделиться журналом»: секрет и домены воркеров в нём замаскированы. Об уязвимостях пиши по правилам из [SECURITY.md](SECURITY.md).
 
 ## Лицензии и авторы
 
@@ -115,5 +137,7 @@ TG WS Proxy runs a local MTProto proxy on your phone, and Telegram connects to i
 2. Open the app and allow notifications and running without battery optimization, so Android doesn't stop the proxy with the screen off.
 3. Tap the power button and wait for `[OK] CONNECTED`.
 4. Tap "Apply in Telegram" and confirm in the client.
+
+Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts; automation apps can start `com.amurcanov.tgwsproxy.ProxyShortcutActivity` in package `io.github.derigava.tgwsproxy` with action `io.github.derigava.tgwsproxy.action.START`, `.STOP` or `.TOGGLE`.
 
 The in-app updater checks the latest release every 12 hours. It verifies the size, SHA-256, package name, version and signing certificate before Android asks you to confirm the install. The app is unofficial and not affiliated with Telegram. Switch the language in Settings.

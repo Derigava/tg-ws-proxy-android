@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the launcher icon. The same actions are open to automation apps. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_start"
+        android:shortcutShortLabel="@string/shortcut_start">
+        <intent
+            android:action="io.github.derigava.tgwsproxy.action.START"
+            android:targetPackage="io.github.derigava.tgwsproxy"
+            android:targetClass="com.amurcanov.tgwsproxy.ProxyShortcutActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="stop"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_stop"
+        android:shortcutShortLabel="@string/shortcut_stop">
+        <intent
+            android:action="io.github.derigava.tgwsproxy.action.STOP"
+            android:targetPackage="io.github.derigava.tgwsproxy"
+            android:targetClass="com.amurcanov.tgwsproxy.ProxyShortcutActivity" />
+    </shortcut>
+</shortcuts>

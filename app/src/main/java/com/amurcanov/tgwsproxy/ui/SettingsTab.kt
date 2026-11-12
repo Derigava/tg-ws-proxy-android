@@ -81,6 +81,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     val savedCfEnabled by settingsStore.cfproxyEnabled.collectAsStateWithLifecycle(initialValue = true)
     val savedCustomDomainEnabled by settingsStore.customCfDomainEnabled.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
+    val savedWorkerDomain by settingsStore.cfWorkerDomain.collectAsStateWithLifecycle(initialValue = "")
     val autoStartOnBoot by settingsStore.autoStartOnBoot.collectAsStateWithLifecycle(initialValue = false)
     val savedSecretKey by settingsStore.secretKey.collectAsStateWithLifecycle(initialValue = "LOADING")
     val themeMode by settingsStore.themeMode.collectAsStateWithLifecycle(initialValue = ThemeModes.DARK)
@@ -117,6 +118,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     var cfEnabled by rememberSaveable(savedCfEnabled) { mutableStateOf(savedCfEnabled) }
     var customCfDomainEnabled by rememberSaveable(savedCustomDomainEnabled) { mutableStateOf(savedCustomDomainEnabled) }
     var customCfDomain by rememberSaveable(savedCustomDomain) { mutableStateOf(savedCustomDomain) }
+    var cfWorkerDomain by rememberSaveable(savedWorkerDomain) { mutableStateOf(savedWorkerDomain) }
     var secretKeyText by remember(savedSecretKey) { mutableStateOf(if (savedSecretKey == "LOADING") "" else savedSecretKey) }
 
     LaunchedEffect(savedSecretKey) {
@@ -139,7 +141,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 isDcAuto, dc1Text, dc2Text, dc3Text, dc4Text, dc5Text, dc203Text,
                 dc1mText, dc2mText, dc3mText, dc4mText, dc5mText, dc203mText,
                 experimentalMode, bindIpText, portText, selectedPoolSize,
-                cfEnabled, customCfDomainEnabled, customCfDomain, secretKeyText
+                cfEnabled, customCfDomainEnabled, customCfDomain, cfWorkerDomain, secretKeyText
             )
         }
     }
@@ -262,6 +264,34 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 scheduleSave()
             }
         )
+
+        SectionLabel(stringResource(R.string.own_cloudflare))
+        DomainInput(
+            label = stringResource(R.string.cf_proxy_domains),
+            value = customCfDomain,
+            placeholder = "example.com",
+            hint = stringResource(if (cfEnabled) R.string.cf_proxy_domains_hint else R.string.cf_proxy_domains_needs_cdn),
+            enabled = cfEnabled && !isRunning,
+            onValueChange = {
+                customCfDomain = it
+                customCfDomainEnabled = it.isNotBlank()
+                scheduleSave()
+            }
+        )
+        Spacer(Modifier.height(12.dp))
+        DomainInput(
+            label = stringResource(R.string.cf_worker_domains),
+            value = cfWorkerDomain,
+            placeholder = "name.account.workers.dev",
+            hint = stringResource(R.string.cf_worker_domains_hint),
+            enabled = !isRunning,
+            onValueChange = {
+                cfWorkerDomain = it
+                scheduleSave()
+            }
+        )
+
+        Spacer(Modifier.height(16.dp))
         SwitchRow(
             title = stringResource(R.string.autostart),
             checked = autoStartOnBoot,
@@ -372,6 +402,46 @@ private fun IpSetupDialog(
         )
         Spacer(Modifier.height(8.dp))
         BrandButton(text = stringResource(R.string.done), onClick = onDismiss)
+    }
+}
+
+/** Comma-separated host names, as the core's coerce_domain_list reads them. */
+internal fun invalidDomains(value: String): List<String> = value
+    .split(',', ';', ' ')
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
+    .filterNot { DOMAIN_PATTERN.matches(it) }
+
+private val DOMAIN_PATTERN =
+    Regex("""^(?=.{1,253}$)([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$""")
+
+@Composable
+private fun DomainInput(
+    label: String,
+    value: String,
+    placeholder: String,
+    hint: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit,
+) {
+    val invalid = remember(value) { invalidDomains(value) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        MonoLabel(label.uppercase())
+        BrandField(
+            value = value,
+            onValueChange = { newValue ->
+                onValueChange(newValue.filter { it.isLetterOrDigit() || it in ".-, " })
+            },
+            keyboardType = KeyboardType.Uri,
+            enabled = enabled,
+            placeholder = placeholder,
+            modifier = Modifier.fillMaxWidth()
+        )
+        if (invalid.isNotEmpty()) {
+            MonoLabel("[!] " + stringResource(R.string.invalid_domain, invalid.first()), color = Brand.alert)
+        } else {
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = Brand.muted)
+        }
     }
 }
 

@@ -117,13 +117,58 @@ class AdapterLifecycleTests(unittest.TestCase):
         for invalid in ({"port": 0}, {"port": 65536}, {"port": True}, {"secret": "bad"},
                         {"host": "not an IP"}, {"dc_ips": "2:broken"},
                         {"cf_domain": "https://example.org"}, {"pool_size": -1},
-                        {"cf_enabled": "true"}):
+                        {"cf_enabled": "true"}, {"cf_worker_domain": "https://w.example.workers.dev"},
+                        {"cf_worker_domain": 5}):
             with self.subTest(invalid=invalid):
                 failed = json.loads(adapter.start(json.dumps(config(**invalid))))
                 self.assertEqual(failed["state"], "error")
                 self.assertFalse(failed["running"])
         self.assertEqual(json.loads(adapter.start("[]"))["state"], "error")
         self.assertEqual(json.loads(adapter.start("{"))["state"], "error")
+
+    def test_cf_worker_domains_reach_core_config_and_reset_on_restart(self):
+        settings = config(cf_worker_domain=" one.example.workers.dev, Two.Example.Workers.Dev ")
+        started = json.loads(adapter.start(json.dumps(settings)))
+        self.assertTrue(started["running"], started)
+        self.assertEqual(started["config"]["cf_worker_domain"],
+                         "one.example.workers.dev,two.example.workers.dev")
+        self.assertEqual(adapter.core_config.proxy_config.cfproxy_worker_domains,
+                         ["one.example.workers.dev", "two.example.workers.dev"])
+        adapter.stop()
+        self.assertTrue(json.loads(adapter.start(json.dumps(config())))["running"])
+        self.assertEqual(adapter.core_config.proxy_config.cfproxy_worker_domains, [])
+
+    def test_journal_is_timestamped_and_redacts_secret_and_worker(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "logs" / "proxy.log"
+            adapter.set_log_file(path)
+            self.addCleanup(lambda: adapter._logger.removeHandler(adapter._file_handler))
+            settings = config(cf_worker_domain="private.example.workers.dev")
+            self.assertTrue(json.loads(adapter.start(json.dumps(settings)))["running"])
+            adapter.note("warn", "lost private.example.workers.dev with dd" + settings["secret"])
+            adapter.stop()
+            adapter._file_handler.flush()
+            text = path.read_text(encoding="utf-8")
+            adapter._file_handler.close()
+        self.assertRegex(text, r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d WARNING \[service\] lost worker#1")
+        self.assertIn("CF worker:     enabled (worker#1)", text)
+        self.assertNotIn("private.example", text)
+        self.assertNotIn(settings["secret"], text)
+
+    def test_network_change_clears_route_backoff_without_restart(self):
+        self.assertFalse(adapter.network_changed())  # Not running: nothing to reset.
+        settings = config()
+        self.assertTrue(json.loads(adapter.start(json.dumps(settings)))["running"])
+        bridge = sys.modules["proxy.bridge"]
+        bridge._tcp_failures[("149.154.167.220", 443)] = 7
+        bridge._tcp_retry_after[("149.154.167.220", 443)] = time.monotonic() + 3600
+        self.assertTrue(adapter.network_changed())
+        self.assertEqual(bridge._tcp_retry_after, {})
+        self.assertEqual(bridge._tcp_failures, {})
+        self.assertEqual(json.loads(adapter.snapshot())["state"], "running")
+        with socket.create_connection(("127.0.0.1", settings["port"]), timeout=1):
+            pass
 
     def test_repeated_start_stop_has_no_thread_or_listener_leak(self):
         settings = config()

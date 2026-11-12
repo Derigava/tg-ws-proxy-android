@@ -10,6 +10,8 @@ import asyncio
 import ipaddress
 import json
 import logging
+import logging.handlers
+import os
 import re
 import threading
 import time
@@ -24,10 +26,24 @@ START_TIMEOUT = 15.0
 STOP_TIMEOUT = 15.0
 _SECRET_PATTERN = re.compile(r"(?i)(?:dd|ee)?[0-9a-f]{32,}")
 _logs = deque(maxlen=100)
+# A user's Worker spends that user's quota; the journal and logcat name it by index.
+_private_domains = []
+LOG_FILE_BYTES = 512 * 1024
+LOG_FILE_BACKUPS = 2
+_LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO,
+               "warn": logging.WARNING, "error": logging.ERROR}
 
 
 def _redact(message):
-    return _SECRET_PATTERN.sub("[secret redacted]", str(message))
+    text = _SECRET_PATTERN.sub("[secret redacted]", str(message))
+    for index, domain in enumerate(_private_domains, 1):
+        text = re.sub(re.escape(domain), f"worker#{index}", text, flags=re.IGNORECASE)
+    return text
+
+
+class _RedactingFormatter(logging.Formatter):
+    def format(self, record):
+        return _redact(super().format(record))
 
 
 class _AndroidLogHandler(logging.Handler):
@@ -55,6 +71,27 @@ _logger.setLevel(logging.INFO)
 # Upstream logs contain connect links and raw secrets. Forward only the
 # redacted handler, never a root logger installed by the embedding process.
 _logger.propagate = False
+_file_handler = None
+
+
+def set_log_file(path):
+    """Keep a timestamped journal that outlives the activity and logcat's ring buffer."""
+    global _file_handler
+    path = str(path)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    handler = logging.handlers.RotatingFileHandler(
+        path, maxBytes=LOG_FILE_BYTES, backupCount=LOG_FILE_BACKUPS, encoding="utf-8")
+    handler.setFormatter(_RedactingFormatter("%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"))
+    previous, _file_handler = _file_handler, handler
+    _logger.addHandler(handler)
+    if previous is not None:
+        _logger.removeHandler(previous)
+        previous.close()
+
+
+def note(level, message):
+    """Service events (start, stop, network changes) go into the same journal."""
+    _logger.log(_LOG_LEVELS.get(str(level).lower(), logging.INFO), "[service] %s", message)
 
 
 def _validated_config(value):
@@ -79,12 +116,8 @@ def _validated_config(value):
         raise ValueError("dc_ips must be a comma-separated DC:IP string")
     entries = [item.strip() for item in dc_value.replace(";", ",").split(",") if item.strip()]
     redirects = core_config.parse_dc_ip_list(entries)
-    cf_domain = value.get("cf_domain", "")
-    if not isinstance(cf_domain, str):
-        raise ValueError("cf_domain must be a string")
-    domains = core_config.coerce_domain_list(cf_domain)
-    if any(not core_config._is_valid_domain(domain) for domain in domains):
-        raise ValueError("Invalid Cloudflare domain")
+    domains = _domain_list(value, "cf_domain", "Invalid Cloudflare domain")
+    worker_domains = _domain_list(value, "cf_worker_domain", "Invalid Cloudflare Worker domain")
     return {
         "host": host,
         "port": port,
@@ -95,7 +128,20 @@ def _validated_config(value):
         "pool_size": pool_size,
         "cf_enabled": cf_enabled,
         "cf_domain": ",".join(domains),
+        # Independent of cf_enabled: upstream tries a user's Worker before
+        # the shared CF proxy domains and the direct TCP fallback.
+        "cf_worker_domain": ",".join(worker_domains),
     }
+
+
+def _domain_list(value, key, message):
+    raw = value.get(key, "")
+    if not isinstance(raw, str):
+        raise ValueError(f"{key} must be a string")
+    domains = [domain.lower() for domain in core_config.coerce_domain_list(raw)]
+    if any(not core_config._is_valid_domain(domain) for domain in domains):
+        raise ValueError(message)
+    return list(dict.fromkeys(domains))
 
 
 class _Runtime:
@@ -213,6 +259,8 @@ class _Runtime:
         target.pool_size = config["pool_size"]
         target.fallback_cfproxy = config["cf_enabled"]
         target.cfproxy_user_domains = core_config.coerce_domain_list(config["cf_domain"])
+        target.cfproxy_worker_domains = core_config.coerce_domain_list(config["cf_worker_domain"])
+        _private_domains[:] = target.cfproxy_worker_domains
         core_stats.__init__()
 
     async def _watch_listener(self, task):
@@ -227,6 +275,33 @@ class _Runtime:
                 self._stats = dict(vars(core_stats))
                 self._stats["summary"] = core_stats.summary()
             await asyncio.sleep(0.05)
+
+    def network_changed(self):
+        """Forget failures from the previous network without dropping live sessions.
+
+        Upstream backs off the direct TCP route and pool refills for up to an hour
+        after failures, and only a restart clears that. A phone that lost signal or
+        switched networks would otherwise skip working routes long after recovery.
+        """
+        with self._lock:
+            loop = self._loop if self._state == "running" else None
+        if loop is None or loop.is_closed():
+            return False
+        try:
+            future = asyncio.run_coroutine_threadsafe(self._reset_routes(), loop)
+            future.result(timeout=5)
+            return True
+        except Exception as exc:
+            _logger.warning("Network change handling failed: %r", exc)
+            return False
+
+    async def _reset_routes(self):
+        core.reset_tcp_backoff()
+        core.ws_pool.reset()
+        core.cf_worker_pool.reset()
+        _logger.info("Network changed: route backoff and idle pools reset")
+        await core.ws_pool.warmup()
+        await core.cf_worker_pool.warmup()
 
     async def _session(self):
         with self._lock:
@@ -317,6 +392,11 @@ def stop():
 def snapshot():
     """Return a JSON snapshot; callers must never log its secret fields."""
     return _runtime.snapshot()
+
+
+def network_changed():
+    """Called by the service when Android's default network changes."""
+    return _runtime.network_changed()
 
 
 def self_test():

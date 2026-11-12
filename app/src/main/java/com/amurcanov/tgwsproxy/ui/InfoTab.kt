@@ -34,12 +34,15 @@ import com.amurcanov.tgwsproxy.AppUpdateRepository
 import com.amurcanov.tgwsproxy.BuildConfig
 import com.amurcanov.tgwsproxy.LogEntry
 import com.amurcanov.tgwsproxy.LogManager
+import com.amurcanov.tgwsproxy.ProxyJournal
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_POSTPONED
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_UPDATE
 import com.amurcanov.tgwsproxy.isNewerVersion
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val RepositoryUrl = "https://github.com/Derigava/tg-ws-proxy-android"
 private const val IssuesUrl = "$RepositoryUrl/issues"
@@ -60,6 +63,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     val savedCfEnabled by settingsStore.cfproxyEnabled.collectAsStateWithLifecycle(initialValue = true)
     val savedCustomCfDomainEnabled by settingsStore.customCfDomainEnabled.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomCfDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
+    val savedCfWorkerDomain by settingsStore.cfWorkerDomain.collectAsStateWithLifecycle(initialValue = "")
     val updateLatestVersion by settingsStore.updateLatestVersion.collectAsStateWithLifecycle(initialValue = "")
     val updateLastError by settingsStore.updateLastError.collectAsStateWithLifecycle(initialValue = "")
     val currentLogs by LogManager.logs.collectAsStateWithLifecycle()
@@ -73,15 +77,6 @@ fun InfoTab(settingsStore: SettingsStore) {
         updateLatestVersion.isNotBlank() -> stringResource(R.string.update_latest_version, updateLatestVersion)
         else -> stringResource(R.string.update_check_manually)
     }
-    val reportText = buildSupportReport(
-        port = savedPort,
-        poolSize = savedPoolSize,
-        cfEnabled = savedCfEnabled,
-        customCfDomainEnabled = savedCustomCfDomainEnabled,
-        customCfDomain = savedCustomCfDomain,
-        logs = currentLogs,
-        context = context
-    )
 
     Column(
         modifier = Modifier
@@ -159,9 +154,35 @@ fun InfoTab(settingsStore: SettingsStore) {
                 subtitle = stringResource(R.string.report_subtitle),
                 icon = R.drawable.ic_dt_diagnostics,
                 onClick = {
-                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                    clipboard?.setPrimaryClip(ClipData.newPlainText("TgWsProxy Report", reportText))
-                    Toast.makeText(context, context.getString(R.string.report_copied), Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        // Built on demand: the journal can be a megabyte, too much for every recomposition.
+                        val journal = withContext(Dispatchers.IO) { ProxyJournal.recentProblems(context) }
+                        val reportText = buildSupportReport(
+                            port = savedPort,
+                            poolSize = savedPoolSize,
+                            cfEnabled = savedCfEnabled,
+                            customCfDomainEnabled = savedCustomCfDomainEnabled,
+                            customCfDomain = savedCustomCfDomain,
+                            cfWorkerDomain = savedCfWorkerDomain,
+                            logs = currentLogs,
+                            journal = journal,
+                            context = context
+                        )
+                        val clipboard = context.getSystemService(ClipboardManager::class.java)
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("TgWsProxy Report", reportText))
+                        Toast.makeText(context, context.getString(R.string.report_copied), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+            ActionRow(
+                title = stringResource(R.string.share_log),
+                subtitle = stringResource(R.string.share_log_subtitle),
+                icon = R.drawable.ic_dt_monitor,
+                onClick = {
+                    scope.launch {
+                        val shared = withContext(Dispatchers.IO) { runCatching { ProxyJournal.share(context) }.getOrDefault(false) }
+                        if (!shared) Toast.makeText(context, context.getString(R.string.share_log_empty), Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
             ActionRow(
@@ -295,7 +316,9 @@ private fun buildSupportReport(
     cfEnabled: Boolean,
     customCfDomainEnabled: Boolean,
     customCfDomain: String,
+    cfWorkerDomain: String,
     logs: List<LogEntry>,
+    journal: List<ProxyJournal.Problem>?,
     context: Context
 ): String {
     val androidVersion = Build.VERSION.RELEASE ?: "?"
@@ -331,13 +354,22 @@ private fun buildSupportReport(
     } else {
         ""
     }
+    // Count only: the report goes to a public issue, and a Worker URL spends the user's quota.
+    val workerCount = cfWorkerDomain.split(',', ';', ' ').count { it.isNotBlank() }
+    val cfWorkerLine = if (workerCount > 0) "\n${context.getString(R.string.report_cf_worker, workerCount)}" else ""
 
     val recentErrors = logs
         .asReversed()
         .filter { it.priority >= 5 }
         .take(10)
 
-    val errorsBlock = if (recentErrors.isEmpty()) {
+    val errorsBlock = if (journal != null) {
+        // The journal also covers hours when the app was closed; the in-memory view does not.
+        if (journal.isEmpty()) context.getString(R.string.none_lower)
+        else journal.joinToString("\n") { row ->
+            "- ${row.lastSeen} [${row.level}] ${row.message}${if (row.count > 1) " (x${row.count})" else ""}"
+        }
+    } else if (recentErrors.isEmpty()) {
         context.getString(R.string.none_lower)
     } else {
         recentErrors.joinToString("\n") { entry ->
@@ -372,9 +404,10 @@ private fun buildSupportReport(
         appendLine(context.getString(R.string.report_ws_pool, poolSize))
         append(context.getString(R.string.report_port, port.trim().ifBlank { "1443" }))
         append(cfDomainLine)
+        append(cfWorkerLine)
         appendLine()
         appendLine()
-        appendLine(context.getString(R.string.report_recent_errors))
+        appendLine(context.getString(if (journal != null) R.string.report_journal_errors else R.string.report_recent_errors))
         append(errorsBlock)
     }.trim()
 }

@@ -157,4 +157,18 @@
     <string name="interval_never">Never</string>
     <string name="interval_hours">%1$d h</string>
     <string name="port_is_not_available">Port %1$d is taken, try another</string>
+    <string name="own_cloudflare">Own Cloudflare</string>
+    <string name="cf_proxy_domains">CF proxy domains</string>
+    <string name="cf_proxy_domains_hint">Your domains in front of the CF proxy, comma-separated. Empty means the shared list.</string>
+    <string name="cf_proxy_domains_needs_cdn">Turn on CloudFlare CDN to use your own domains.</string>
+    <string name="cf_worker_domains">CF Worker</string>
+    <string name="cf_worker_domains_hint">Your Worker domains, comma-separated. They are tried first, before the CF proxy and direct connection, and work even with CloudFlare CDN off.</string>
+    <string name="invalid_domain">Not a domain: %1$s</string>
+    <string name="report_cf_worker">CF Worker: on (%1$d)</string>
+    <string name="shortcut_start">Start proxy</string>
+    <string name="shortcut_stop">Stop proxy</string>
+    <string name="share_log">Share log</string>
+    <string name="share_log_subtitle">The whole journal for the last hours, as a file</string>
+    <string name="share_log_empty">The journal is empty: start the proxy first</string>
+    <string name="report_journal_errors">Errors and events, last 24 h:</string>
 </resources>
