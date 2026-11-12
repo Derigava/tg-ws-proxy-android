@@ -93,6 +93,8 @@ apksigner verify --print-certs tgwsproxy-*-arm64.apk
 
 Если что-то падает, релиз не выходит и рабочая версия остаётся на месте.
 
+Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, а CI берёт следующий свободный патч, например `1.1.0`, затем `1.1.1`. Для новой линейки достаточно поменять `VERSION`. Что изменилось, описано в [CHANGELOG.md](CHANGELOG.md). Раздел с номером версии попадает в начало текста релиза.
+
 ## Сборка
 
 Нужны JDK 21, Python 3.13, Android SDK platform 35 и build-tools 36.0.0. SDK задаётся через `ANDROID_HOME` или `local.properties`.

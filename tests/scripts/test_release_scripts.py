@@ -131,3 +131,35 @@ class ApkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+release = module("release_version")
+
+
+class ReleaseVersionTests(unittest.TestCase):
+    def test_first_build_on_a_line_is_patch_zero(self):
+        self.assertEqual(release.next_version("1.1", ["v1.0.48", "v1.0.41"]), "1.1.0")
+
+    def test_next_patch_follows_the_highest_tag_on_the_line(self):
+        self.assertEqual(release.next_version("1.1", ["v1.1.0", "v1.1.10", "v1.1.2", "v1.10.5"]), "1.1.11")
+
+    def test_version_file_must_be_major_minor(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "VERSION"
+            path.write_text("1.1\n", encoding="utf-8")
+            self.assertEqual(release.release_line(path), "1.1")
+            path.write_text("1.1.0", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                release.release_line(path)
+
+    def test_notes_start_with_the_matching_changelog_section(self):
+        with tempfile.TemporaryDirectory() as folder:
+            log = Path(folder) / "CHANGELOG.md"
+            log.write_text("# Log\n\n## 1.1.1\n\nnext\n\n## 1.1.0\n\n- worker\n- journal\n\n## 1.0.48\n\nold\n",
+                           encoding="utf-8")
+            notes = release.release_notes("1.1.0", 1050, "1.11.4", log)
+            self.assertTrue(notes.startswith("- worker\n- journal\n\n---\n"))
+            self.assertNotIn("old", notes)
+            self.assertNotIn("next", notes)
+            self.assertIn("Android versionCode: 1050", notes)
+            self.assertTrue(release.release_notes("1.1.3", 1, "1.11.4", log).startswith("Ядро Flowseal"))

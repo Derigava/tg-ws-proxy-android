@@ -71,12 +71,17 @@ jobs:
           EVENT: ${{ github.event_name }}
           CHANGED: ${{ steps.upstream.outputs.changed }}
           PRIVATE: ${{ github.event.repository.private }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           build=true
           if [[ "$EVENT" == "schedule" && "$CHANGED" == "false" ]]; then build=false; fi
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "version_code=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
-          echo "version_name=1.0.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          # VERSION holds MAJOR.MINOR; the next free patch on that line names the build.
+          # The updater compares versionCode, so the name can follow the changelog.
+          line="$(tr -d '[:space:]' < VERSION)"
+          tags="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$line." --jq '.[].ref | sub("refs/tags/"; "")')"
+          echo "version_name=$(printf '%s\n' "$tags" | python scripts/release_version.py version --line "$line")" >> "$GITHUB_OUTPUT"
           if [[ "$PRIVATE" == "true" ]]; then
             echo 'updates_enabled=false' >> "$GITHUB_OUTPUT"
           else
@@ -316,8 +321,8 @@ jobs:
             echo "Release $tag already exists; refusing to replace an installed version."
             exit 1
           fi
-          printf 'Ядро Flowseal: %s\nAndroid versionCode: %s\n\nСобрано из зафиксированных исходников после проверок Python, JVM, Android 16 КБ и бинарников ARM64.\nСкачай APK ниже и установи поверх текущей версии. Контрольная сумма лежит в SHA256SUMS.\n\nFlowseal core: %s. Download the APK below and install it over the current version.\n' \
-            "$CORE_VERSION" "$APP_VERSION_CODE" "$CORE_VERSION" > "$RUNNER_TEMP/release-notes.md"
+          python scripts/release_version.py notes --version "$APP_VERSION_NAME" \
+            --version-code "$APP_VERSION_CODE" --core-version "$CORE_VERSION" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
             --target "$(git rev-parse HEAD)" --title "TG WS Proxy Android $APP_VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
