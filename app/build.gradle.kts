@@ -15,6 +15,7 @@ val localProps = Properties().apply {
 fun signingValue(env: String, prop: String) = System.getenv(env) ?: localProps.getProperty(prop)
 val releaseKey = signingValue("TGWS_KEYSTORE_FILE", "KEYSTORE_FILE")
 val testKeystore = providers.gradleProperty("testKeystore").orNull
+val appUpdatesEnabled = providers.gradleProperty("appUpdatesEnabled").orElse("false").get().toBooleanStrict()
 
 android {
     namespace = "com.amurcanov.tgwsproxy"
@@ -26,7 +27,7 @@ android {
         versionCode = providers.gradleProperty("appVersionCode").orElse("1000").get().toInt()
         versionName = providers.gradleProperty("appVersionName").orElse("1.0.0").get()
         buildConfigField("String", "CORE_VERSION", "\"$coreVersion\"")
-        buildConfigField("boolean", "APP_UPDATES_ENABLED", providers.gradleProperty("appUpdatesEnabled").orElse("false").get())
+        buildConfigField("boolean", "APP_UPDATES_ENABLED", appUpdatesEnabled.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -39,6 +40,11 @@ android {
         create("emulator") {
             dimension = "arch"
             ndk.abiFilters.add("x86_64")
+        }
+    }
+    if (appUpdatesEnabled) {
+        for (arch in listOf("arm64", "emulator")) {
+            sourceSets.getByName(arch).manifest.srcFile("src/updates/AndroidManifest.xml")
         }
     }
     signingConfigs {

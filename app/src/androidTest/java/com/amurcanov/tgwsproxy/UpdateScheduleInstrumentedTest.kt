@@ -32,7 +32,7 @@ class UpdateScheduleInstrumentedTest {
     }
 
     @Test fun releaseMetadataSurvivesProcessCacheSerialization() {
-        val release = AppReleaseInfo("v1.0.42", 1042)
+        val release = AppReleaseInfo("v1.0.42", 1042, UpdateApk(1234, "a".repeat(64)))
         assertEquals(release, cachedReleaseInfo(release.cacheJson()))
         assertNull(cachedReleaseInfo(""))
         assertNull(cachedReleaseInfo("{invalid"))
@@ -43,6 +43,7 @@ class UpdateScheduleInstrumentedTest {
             {"versionTag":"v1.1.0","versionCode":1050,"releaseUrl":"https://example.invalid/fake"}
         """.trimIndent())
         assertEquals("https://github.com/Derigava/tg-ws-proxy-android/releases/tag/v1.1.0", cached?.releaseUrl)
+        assertNull(cached?.apk)
         assertNull(cachedReleaseInfo("""{"versionTag":"v1.1.0/../../fake","versionCode":1050}"""))
     }
 }

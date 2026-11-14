@@ -37,7 +37,6 @@ import com.amurcanov.tgwsproxy.ProxyJournal
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_POSTPONED
-import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_RELEASE_OPENED
 import com.amurcanov.tgwsproxy.isNewerVersion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -242,18 +241,14 @@ fun InfoTab(settingsStore: SettingsStore) {
                     )
                 }
             },
-            onOpenRelease = {
-                if (openUrlInBrowser(context, release.releaseUrl)) {
-                    pendingManualRelease = null
-                    scope.launch {
-                        settingsStore.saveUpdateDialogAction(
-                            version = release.versionTag,
-                            action = UPDATE_DIALOG_ACTION_RELEASE_OPENED,
-                            actedAt = System.currentTimeMillis()
-                        )
-                    }
-                } else {
-                    Toast.makeText(context, R.string.update_open_failed, Toast.LENGTH_LONG).show()
+            onActionCompleted = { action ->
+                pendingManualRelease = null
+                scope.launch {
+                    settingsStore.saveUpdateDialogAction(
+                        version = release.versionTag,
+                        action = action,
+                        actedAt = System.currentTimeMillis()
+                    )
                 }
             }
         )

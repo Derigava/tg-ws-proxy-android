@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 
-MIN_ANDROID_TESTS = 19
+MIN_ANDROID_TESTS = 24
 
 
 def validate_result(output: str) -> int:
@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--test-apk", type=Path, required=True)
-    parser.add_argument("--wrong-signer-apk", type=Path, required=True)
+    parser.add_argument("--wrong-signer-apk", type=Path, required=True, help="wrong-key.apk from the updater fixture directory")
     parser.add_argument("--expected-page-size", choices=("4096", "16384"), required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
@@ -41,6 +41,10 @@ def main():
         if foreign.returncode == 0 or "INSTALL_FAILED_UPDATE_INCOMPATIBLE" not in foreign.stdout + foreign.stderr:
             raise RuntimeError(f"Expected Android to reject the foreign signing key: {foreign.stdout}{foreign.stderr}")
         print("Android rejected an update with a foreign signing key")
+        fixture_dir = "/data/local/tmp/tgws-updater-fixtures"
+        adb("shell", "mkdir", "-p", fixture_dir)
+        for filename in ("valid.apk", "same-version.apk", "wrong-package.apk", "wrong-key.apk"):
+            adb("push", args.wrong_signer_apk.parent / filename, f"{fixture_dir}/{filename}")
         result = subprocess.run(["adb", "shell", "am", "instrument", "-w", "-r", "-e", "expectedPageSize",
             args.expected_page_size, "io.github.derigava.tgwsproxy.test/androidx.test.runner.AndroidJUnitRunner"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=240)

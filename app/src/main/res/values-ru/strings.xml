@@ -104,6 +104,17 @@
     <string name="update_available_title">Есть обновление</string>
     <string name="update_available_description">Версия %1$s доступна на GitHub. Скачай APK со страницы релиза и установи через Android.</string>
     <string name="update_action">Открыть релиз на GitHub</string>
+    <string name="update_install">Обновить</string>
+    <string name="update_install_description">Скачать версию %1$s из GitHub. Android попросит подтвердить установку.</string>
+    <string name="update_downloading">Скачиваем и проверяем APK…</string>
+    <string name="update_allow_install">Разреши установку из этого приложения в настройках Android.</string>
+    <string name="update_install_failed">Не удалось подготовить обновление</string>
+    <string name="update_error_size">Неверный размер APK</string>
+    <string name="update_error_checksum">Контрольная сумма APK не совпадает</string>
+    <string name="update_error_unrecognized">Android не распознал APK</string>
+    <string name="update_error_package">APK другого приложения</string>
+    <string name="update_error_version">Версия APK не подходит для обновления</string>
+    <string name="update_error_signature">APK подписан другим ключом</string>
     <string name="access_section">Доступы</string>
     <string name="access_title">Разреши работу в фоне</string>
     <string name="access_intro">Иначе Android может остановить прокси, когда экран выключен. Нажми на строку, чтобы открыть нужный экран.</string>

@@ -104,6 +104,17 @@
     <string name="update_available_title">Update available</string>
     <string name="update_available_description">Version %1$s is available on GitHub. Download the APK from the release page and install it through Android.</string>
     <string name="update_action">Open GitHub release</string>
+    <string name="update_install">Update</string>
+    <string name="update_install_description">Download version %1$s from GitHub. Android will ask you to confirm the installation.</string>
+    <string name="update_downloading">Downloading and verifying APK…</string>
+    <string name="update_allow_install">Allow installation from this app in Android settings.</string>
+    <string name="update_install_failed">Could not prepare the update</string>
+    <string name="update_error_size">Wrong APK size</string>
+    <string name="update_error_checksum">APK checksum does not match</string>
+    <string name="update_error_unrecognized">Android did not recognize the APK</string>
+    <string name="update_error_package">APK belongs to another app</string>
+    <string name="update_error_version">APK version is invalid for this update</string>
+    <string name="update_error_signature">APK is signed with another key</string>
     <string name="access_section">Access</string>
     <string name="access_title">Allow background work</string>
     <string name="access_intro">Otherwise Android may stop the proxy when the screen is off. Tap a row to open the right screen.</string>

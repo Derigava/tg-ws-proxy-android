@@ -67,7 +67,7 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 
 ## Обновления
 
-Приложение раз в 12 часов проверяет сведения о последнем релизе через WorkManager. Кнопка «Открыть релиз на GitHub» открывает страницу этого тега. Скачай APK со страницы релиза и установи его через Android. Android проверяет подпись при обновлении установленного пакета.
+Приложение раз в 12 часов проверяет сведения о последнем релизе через WorkManager. Кнопка «Обновить» скачивает APK с GitHub, проверяет его размер, SHA-256, имя пакета, версию и подпись. Установку подтверждаешь в Android. При первом обновлении Android может попросить разрешить установку из этого приложения. Страницу релиза можно открыть отдельно.
 
 Сертификат подписи, SHA-256:
 
@@ -148,4 +148,4 @@ TG WS Proxy runs a local MTProto proxy on your phone. It uses the Python core of
 
 Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts. Automation intents for `com.amurcanov.tgwsproxy.ProxyShortcutActivity` require confirmation.
 
-The app checks GitHub release metadata every 12 hours. Open the release page to download the APK and confirm installation in Android. The app is unofficial and independent of Telegram. Switch the language in Settings.
+The app checks GitHub release metadata every 12 hours. Tap Update to download and verify the APK, then confirm installation in Android. You can also open the GitHub release page. The app is unofficial and independent of Telegram. Switch the language in Settings.

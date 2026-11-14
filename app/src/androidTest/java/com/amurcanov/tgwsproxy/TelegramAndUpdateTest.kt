@@ -35,7 +35,7 @@ class TelegramAndUpdateTest {
             "html_url": "https://example.invalid/fake",
             "assets": [
                 {"name":"update.json", "browser_download_url":"https://example.invalid/update.json"},
-                {"name":"SHA256SUMS"}, {"name":"tgwsproxy-1.1.0-arm64.apk"}
+                {"name":"SHA256SUMS"}, {"name":"tgwsproxy-1.1.0-arm64.apk","size":26857982}
             ]
         }
     """.trimIndent()
@@ -48,8 +48,9 @@ class TelegramAndUpdateTest {
             assertEquals("https://github.com/Derigava/tg-ws-proxy-android/releases/download/v1.1.0/update.json", url)
             metadataJson
         }
-        assertEquals(AppReleaseInfo("v1.1.0", 1050), result)
+        assertEquals(AppReleaseInfo("v1.1.0", 1050, UpdateApk(26857982, "a".repeat(64))), result)
         assertEquals("https://github.com/Derigava/tg-ws-proxy-android/releases/tag/v1.1.0", result?.releaseUrl)
+        assertEquals("https://github.com/Derigava/tg-ws-proxy-android/releases/download/v1.1.0/tgwsproxy-1.1.0-arm64.apk", result?.apkUrl)
     }
 
     @Test fun excludesUnpublishedAndIncompleteReleasesBeforeMetadataRequest() {
@@ -72,12 +73,12 @@ class TelegramAndUpdateTest {
         assertTrue(runCatching { parseRelease(release) { wrongVersion } }.exceptionOrNull() is IllegalArgumentException)
     }
 
-    @Test fun requestedPermissionsExcludeDirectInstallationAndBatteryExemption() {
+    @Test fun installationPermissionIsLimitedToBuildsWithUpdates() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         @Suppress("DEPRECATION")
         val permissions = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
             .requestedPermissions.orEmpty()
-        assertFalse("android.permission.REQUEST_INSTALL_PACKAGES" in permissions)
+        assertEquals(BuildConfig.APP_UPDATES_ENABLED, "android.permission.REQUEST_INSTALL_PACKAGES" in permissions)
         assertFalse("android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" in permissions)
         assertTrue("android.permission.RECEIVE_BOOT_COMPLETED" in permissions)
         assertTrue("android.permission.FOREGROUND_SERVICE" in permissions)
@@ -100,7 +101,12 @@ class TelegramAndUpdateTest {
         assertFalse(boot.exported)
         assertFalse(service.exported)
         assertFalse(shortcut.exported)
-        assertNull(pm.resolveContentProvider("${context.packageName}.updates", 0))
+        val updaterProvider = pm.resolveContentProvider("${context.packageName}.updates", 0)
+        assertEquals(BuildConfig.APP_UPDATES_ENABLED, updaterProvider != null)
+        if (updaterProvider != null) {
+            assertFalse(updaterProvider.exported)
+            assertTrue(updaterProvider.grantUriPermissions)
+        }
         assertNotNull(pm.resolveContentProvider("${context.packageName}.logs", 0))
     }
 
