@@ -13,10 +13,10 @@ import androidx.core.app.NotificationManagerCompat
 
 /** What the system has to allow for the proxy to keep working with the screen off. */
 object SystemAccess {
-    enum class Item { Notifications, Battery, Background, OemAutostart, InstallUpdates }
+    enum class Item { Notifications, Battery, Background, OemAutostart }
 
     /** Items without which Android may stop the proxy in the background or hide its controls. */
-    val critical = setOf(Item.Notifications, Item.Battery, Item.Background)
+    val critical = setOf(Item.Notifications, Item.Background)
 
     // Firmware with its own autostart switch. Android exposes no status for it, so it can only be opened.
     private val autostartScreens: Map<String, List<Pair<String, String>>> = mapOf(
@@ -57,7 +57,6 @@ object SystemAccess {
         add(Item.Battery)
         if (isBackgroundRestricted(context)) add(Item.Background)
         if (manufacturer in autostartScreens) add(Item.OemAutostart)
-        if (BuildConfig.APP_UPDATES_ENABLED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) add(Item.InstallUpdates)
     }
 
     /** True or false when the platform can tell; null when the user has to check it by eye. */
@@ -67,25 +66,18 @@ object SystemAccess {
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
         Item.Background -> !isBackgroundRestricted(context)
         Item.OemAutostart -> null
-        Item.InstallUpdates -> Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
-            context.packageManager.canRequestPackageInstalls()
     }
 
     /** Opens the screen that changes this item. Notifications on Android 13+ go through the runtime prompt first. */
     fun open(context: Context, item: Item) {
         val opened = when (item) {
             Item.Notifications -> tryStart(context, notificationSettings(context)) || tryStart(context, appDetails(context))
-            Item.Battery -> tryStart(context, batteryPrompt(context)) ||
-                tryStart(context, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) ||
+            Item.Battery -> tryStart(context, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) ||
                 tryStart(context, appDetails(context))
             Item.Background -> tryStart(context, appDetails(context))
             Item.OemAutostart -> autostartScreens[manufacturer].orEmpty().any { (pkg, cls) ->
                 tryStart(context, Intent().setComponent(ComponentName(pkg, cls)))
             } || tryStart(context, appDetails(context))
-            Item.InstallUpdates -> tryStart(
-                context,
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri(context))
-            ) || tryStart(context, appDetails(context))
         }
         if (!opened) {
             Toast.makeText(context, R.string.background_request_failed, Toast.LENGTH_LONG).show()
@@ -96,9 +88,6 @@ object SystemAccess {
 
     private fun appDetails(context: Context) =
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri(context))
-
-    private fun batteryPrompt(context: Context) =
-        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageUri(context))
 
     private fun notificationSettings(context: Context) =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

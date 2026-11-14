@@ -98,7 +98,6 @@ private fun AccessRow(row: AccessRowState, onClick: () -> Unit) {
         SystemAccess.Item.Battery -> R.string.access_battery to R.string.access_battery_hint
         SystemAccess.Item.Background -> R.string.access_background to R.string.access_background_hint
         SystemAccess.Item.OemAutostart -> R.string.access_autostart to R.string.access_autostart_hint
-        SystemAccess.Item.InstallUpdates -> R.string.access_install to R.string.access_install_hint
     }
     // Colour never works alone: each state has its own glyph.
     val (glyph, glyphColor) = when (row.granted) {
@@ -132,8 +131,7 @@ private fun AccessRow(row: AccessRowState, onClick: () -> Unit) {
 /** Shown once on first launch, and again from the warning on the proxy screen. */
 @Composable
 fun AccessSetupDialog(rows: List<AccessRowState>, onOpen: (SystemAccess.Item) -> Unit, onDone: () -> Unit) {
-    val setupRows = rows.filter { it.item != SystemAccess.Item.InstallUpdates }
-    val allDone = setupRows.none { it.granted == false }
+    val allDone = !rows.hasCriticalGap()
     BrandDialog(
         onDismiss = onDone,
         modifier = Modifier.fillMaxWidth(0.92f)
@@ -144,7 +142,7 @@ fun AccessSetupDialog(rows: List<AccessRowState>, onOpen: (SystemAccess.Item) ->
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.access_intro), style = MaterialTheme.typography.bodyMedium, color = Brand.muted)
         Spacer(Modifier.height(16.dp))
-        AccessList(rows = setupRows, onOpen = onOpen)
+        AccessList(rows = rows, onOpen = onOpen)
         Spacer(Modifier.height(16.dp))
         if (allDone) {
             BrandButton(text = stringResource(R.string.done), onClick = onDone)

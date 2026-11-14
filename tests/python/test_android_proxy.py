@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import socket
+import ssl
 import sys
 import threading
 import time
@@ -43,6 +44,21 @@ class AdapterLifecycleTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         lock = json.loads((ROOT / "upstream/flowseal.lock.json").read_text(encoding="utf-8"))
         self.assertEqual(result["core_version"], lock["core_version"])
+
+    def test_fronting_requires_telegram_identity_in_verified_certificate(self):
+        fronting = adapter.raw_websocket._ssl_ctx_fronting
+        self.assertEqual(fronting.verify_mode, ssl.CERT_REQUIRED)
+        self.assertTrue(adapter.raw_websocket._ssl_ctx.check_hostname)
+        client = fronting.wrap_bio(ssl.MemoryBIO(), ssl.MemoryBIO(), server_hostname="sprinthost.ru")
+        with patch.object(ssl.SSLObject, "do_handshake") as verify_chain:
+            for name in ("telegram.org", "*.web.telegram.org"):
+                with patch.object(client, "getpeercert", return_value={"subjectAltName": [("DNS", name)]}):
+                    client.do_handshake()
+            for name in ("sprinthost.ru", "telegram.org.example.com", "*.org"):
+                with patch.object(client, "getpeercert", return_value={"subjectAltName": [("DNS", name)]}):
+                    with self.assertRaises(ssl.SSLCertVerificationError):
+                        client.do_handshake()
+            self.assertEqual(verify_chain.call_count, 5)
 
     def test_listener_ready_and_snapshot_uses_actual_configuration(self):
         settings = config()

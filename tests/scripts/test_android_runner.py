@@ -8,7 +8,7 @@ spec.loader.exec_module(module)
 
 
 def test_accepts_complete_instrumentation_success():
-    assert module.validate_result("OK (18 tests)\nINSTRUMENTATION_CODE: -1\n") == 18
+    assert module.validate_result("OK (19 tests)\nINSTRUMENTATION_CODE: -1\n") == 19
 
 
 @pytest.mark.parametrize("output", ["FAILURES!!!\nTests run: 18, Failures: 1", "INSTRUMENTATION_STATUS_CODE: -2\nOK (18 tests)", "OK (14 tests)", "OK (0 tests)", "INSTRUMENTATION_FAILED: Process crashed", ""])

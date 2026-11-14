@@ -1,4 +1,4 @@
-"""Vendor a complete, immutable Flowseal core without editing upstream files."""
+"""Vendor a pinned Flowseal core and apply its Android AES library selection."""
 from __future__ import annotations
 
 import argparse
@@ -18,6 +18,16 @@ ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "Flowseal/tg-ws-proxy"
 LOCK = ROOT / "upstream/flowseal.lock.json"
 VENDOR = ROOT / "upstream/flowseal"
+AES_SOURCE = "proxy/_aes.py"
+AES_LOADER = b'    def _load_libcrypto():\n        name = ctypes.util.find_library("crypto")'
+ANDROID_AES_LOADER = (
+    b'    import sys\n\n'
+    b'    def _load_libcrypto():\n'
+    b'        if hasattr(sys, "getandroidapilevel"):\n'
+    b'            # Chaquopy ships this OpenSSL library alongside its Python runtime.\n'
+    b'            return ctypes.CDLL("libcrypto_python.so")\n\n'
+    b'        name = ctypes.util.find_library("crypto")'
+)
 
 
 def fetch(url: str) -> bytes:
@@ -67,6 +77,13 @@ def extract_sources(archive: bytes) -> dict[str, bytes]:
     return files
 
 
+def patch_android_aes(source: bytes) -> bytes:
+    needle = b"\n" + AES_LOADER
+    if source.count(needle) != 1:
+        raise ValueError("Review the Android AES loader against the new Flowseal source")
+    return source.replace(needle, ANDROID_AES_LOADER, 1)
+
+
 def validate(vendor: Path, lock: dict) -> None:
     if lock.get("repository") != REPOSITORY or not re.fullmatch(r"[0-9a-f]{40}", lock.get("commit", "")):
         raise ValueError("Invalid upstream provenance")
@@ -98,6 +115,8 @@ def sync(ref: str | None = None) -> dict:
         validate(VENDOR, previous)
         return {"changed": False, "tag": previous["tag"], "commit": commit, "core_version": previous["core_version"]}
     files = extract_sources(fetch(f"https://codeload.github.com/{REPOSITORY}/zip/{commit}"))
+    original_aes_hash = sha256(files[AES_SOURCE])
+    files[AES_SOURCE] = patch_android_aes(files[AES_SOURCE])
     version_match = re.search(rb'__version__\s*=\s*[\"\']([^\"\']+)', files["proxy/__init__.py"])
     if not version_match:
         raise ValueError("Unable to read upstream core version")
@@ -105,6 +124,7 @@ def sync(ref: str | None = None) -> dict:
     if core_version != ref.removeprefix("v"):
         raise ValueError("Release tag and core version disagree")
     lock = {"repository": REPOSITORY, "tag": ref, "commit": commit, "core_version": core_version,
+            "android_patch_base": {AES_SOURCE: original_aes_hash},
             "files": {path: sha256(data) for path, data in sorted(files.items())}}
     VENDOR.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="flowseal-", dir=VENDOR.parent) as temporary:

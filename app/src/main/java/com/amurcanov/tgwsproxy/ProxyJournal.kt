@@ -60,7 +60,7 @@ object ProxyJournal {
             writer.appendLine("TG WS Proxy ${BuildConfig.VERSION_NAME}, core ${BuildConfig.CORE_VERSION}")
             sources.forEach { source -> source.bufferedReader(Charsets.UTF_8).use { it.copyTo(writer) } }
         }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", out)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.logs", out)
         val send = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_STREAM, uri)

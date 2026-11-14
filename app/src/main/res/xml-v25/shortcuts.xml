@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Long-press the launcher icon. The same actions are open to automation apps. -->
+<!-- Long-press the launcher icon. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut
         android:shortcutId="start"
@@ -9,7 +9,7 @@
         <intent
             android:action="io.github.derigava.tgwsproxy.action.START"
             android:targetPackage="io.github.derigava.tgwsproxy"
-            android:targetClass="com.amurcanov.tgwsproxy.ProxyShortcutActivity" />
+            android:targetClass="com.amurcanov.tgwsproxy.LauncherShortcutActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="stop"
@@ -19,6 +19,6 @@
         <intent
             android:action="io.github.derigava.tgwsproxy.action.STOP"
             android:targetPackage="io.github.derigava.tgwsproxy"
-            android:targetClass="com.amurcanov.tgwsproxy.ProxyShortcutActivity" />
+            android:targetClass="com.amurcanov.tgwsproxy.LauncherShortcutActivity" />
     </shortcut>
 </shortcuts>

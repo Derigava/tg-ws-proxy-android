@@ -6,10 +6,10 @@
 
 ## Что сюда относится
 
-- Проверка и установка обновлений в приложении: `ApkInstaller.kt`, `AppUpdate.kt`.
+- Проверка обновлений и ссылки на релизы в `AppUpdate.kt`.
 - Утечка MTProto-секрета из приложения, логов или отчёта.
 - Подпись и выпуск релизов: `.github/workflows/android-release.yml`.
 
-Ошибки в самом протоколе и ядре относятся к [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy), код в `upstream/flowseal` здесь не правится.
+Ошибки в протоколе и ядре относятся к [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy). Особенности подключения и запуска ядра на Android можно сообщить здесь.
 
 Поддерживается только последний релиз.

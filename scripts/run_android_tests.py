@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 
-MIN_ANDROID_TESTS = 18
+MIN_ANDROID_TESTS = 19
 
 
 def validate_result(output: str) -> int:
@@ -22,11 +22,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apk", type=Path, required=True)
     parser.add_argument("--test-apk", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, required=True)
+    parser.add_argument("--wrong-signer-apk", type=Path, required=True)
     parser.add_argument("--expected-page-size", choices=("4096", "16384"), required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
-    for path in (args.apk, args.test_apk, args.fixtures):
+    for path in (args.apk, args.test_apk, args.wrong_signer_apk):
         if not path.exists():
             raise FileNotFoundError(path)
     def adb(*command):
@@ -36,8 +36,11 @@ def main():
     try:
         adb("install", "-r", args.apk)
         adb("install", "-r", args.test_apk)
-        adb("shell", "rm", "-rf", "/data/local/tmp/tgws-updater-fixtures")
-        adb("push", args.fixtures, "/data/local/tmp/")
+        foreign = subprocess.run(["adb", "install", "-r", str(args.wrong_signer_apk)], capture_output=True,
+                                 text=True, timeout=120)
+        if foreign.returncode == 0 or "INSTALL_FAILED_UPDATE_INCOMPATIBLE" not in foreign.stdout + foreign.stderr:
+            raise RuntimeError(f"Expected Android to reject the foreign signing key: {foreign.stdout}{foreign.stderr}")
+        print("Android rejected an update with a foreign signing key")
         result = subprocess.run(["adb", "shell", "am", "instrument", "-w", "-r", "-e", "expectedPageSize",
             args.expected_page_size, "io.github.derigava.tgwsproxy.test/androidx.test.runner.AndroidJUnitRunner"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=240)

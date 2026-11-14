@@ -89,22 +89,13 @@ chaquopy {
         version = "3.13"
         (providers.gradleProperty("buildPython").orNull ?: localProps.getProperty("buildPython"))?.let { buildPython(it) }
         pip {
-            install("httpx[http2]==0.28.1")
-            install("certifi==2026.10.23")
-        }
-    }
-    productFlavors {
-        getByName("arm64") {
-            pip { install("https://chaquo.com/pypi-13.1/cryptography/cryptography-42.0.8-1-cp313-cp313-android_24_arm64_v8a.whl") }
-        }
-        getByName("emulator") {
-            pip { install("https://chaquo.com/pypi-13.1/cryptography/cryptography-42.0.8-1-cp313-cp313-android_24_x86_64.whl") }
+            install("-r", "requirements-android.txt")
         }
     }
     sourceSets {
         getByName("main") {
             srcDir("src/main/python")
-            // Include just the unmodified proxy package, not upstream desktop UI/tests.
+            // Include only the proxy package. The locked tree includes the Android AES loader.
             srcDir(rootProject.file("upstream/flowseal"))
             exclude("tests/**", "LICENSE", "*.json", "*.md")
         }

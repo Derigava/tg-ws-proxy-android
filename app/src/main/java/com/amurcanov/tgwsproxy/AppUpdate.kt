@@ -18,6 +18,7 @@ const val UPDATE_CHECK_NEVER = -1
 const val DEFAULT_UPDATE_CHECK_INTERVAL_HOURS = 12
 private const val RELEASE_API = "https://api.github.com/repos/Derigava/tg-ws-proxy-android/releases/latest"
 private const val RELEASE_PREFIX = "https://github.com/Derigava/tg-ws-proxy-android/releases/"
+private val RELEASE_TAG = Regex("v[0-9]+\\.[0-9]+\\.[0-9]+")
 
 fun updateIntervalHoursToMillis(hours: Int): Long? = when {
     hours <= 0 -> null
@@ -42,28 +43,22 @@ fun updateIntervalLabel(hours: Int): String = when (hours) {
 
 data class AppReleaseInfo(
     val versionTag: String,
-    val releaseUrl: String,
-    val source: RemoteVersionSource = RemoteVersionSource.Release,
-    val versionCode: Long,
-    val apkName: String,
-    val apkUrl: String,
-    val apkSize: Long,
-    val sha256: String,
-    val checksumsUrl: String
-)
+    val versionCode: Long
+) {
+    init {
+        require(RELEASE_TAG.matches(versionTag) && versionCode > 0)
+    }
+
+    val releaseUrl: String get() = RELEASE_PREFIX + "tag/" + versionTag
+}
 
 internal fun AppReleaseInfo.cacheJson(): String = JSONObject()
-    .put("versionTag", versionTag).put("releaseUrl", releaseUrl).put("versionCode", versionCode)
-    .put("apkName", apkName).put("apkUrl", apkUrl).put("apkSize", apkSize)
-    .put("sha256", sha256).put("checksumsUrl", checksumsUrl).toString()
+    .put("versionTag", versionTag).put("versionCode", versionCode).toString()
 
 internal fun cachedReleaseInfo(json: String): AppReleaseInfo? = runCatching {
     if (json.isBlank()) return@runCatching null
     val value = JSONObject(json)
-    AppReleaseInfo(value.getString("versionTag"), value.getString("releaseUrl"),
-        versionCode = value.getLong("versionCode"), apkName = value.getString("apkName"),
-        apkUrl = value.getString("apkUrl"), apkSize = value.getLong("apkSize"),
-        sha256 = value.getString("sha256"), checksumsUrl = value.getString("checksumsUrl"))
+    AppReleaseInfo(value.getString("versionTag"), value.getLong("versionCode"))
 }.getOrNull()
 
 /** Serializes UI/background checks and reuses a fresh persisted result. */
@@ -91,47 +86,41 @@ object AppUpdateRepository {
     }
 }
 
-enum class RemoteVersionSource { Release, Tag }
 const val UPDATE_DIALOG_ACTION_POSTPONED = "postponed"
-const val UPDATE_DIALOG_ACTION_UPDATE = "update"
+const val UPDATE_DIALOG_ACTION_RELEASE_OPENED = "release_opened"
 
 /** Only published stable releases with complete APK metadata are update candidates. */
-@Suppress("UNUSED_PARAMETER")
-suspend fun fetchLatestReleaseInfo(localVersion: String? = null): AppReleaseInfo? = withContext(Dispatchers.IO) {
+private suspend fun fetchLatestReleaseInfo(): AppReleaseInfo? = withContext(Dispatchers.IO) {
     if (!BuildConfig.APP_UPDATES_ENABLED) return@withContext null
     try {
-        val release = JSONObject(readUpdateText(RELEASE_API))
-        if (release.optBoolean("draft") || release.optBoolean("prerelease")) return@withContext null
-        val releaseUrl = release.getString("html_url")
-        require(releaseUrl.startsWith(RELEASE_PREFIX)) { "Unexpected release repository" }
-        val assets = release.getJSONArray("assets")
-        fun asset(name: String): JSONObject? = (0 until assets.length())
-            .map { assets.getJSONObject(it) }.singleOrNull { it.optString("name") == name }
-        fun assetUrl(value: JSONObject): String = value.getString("browser_download_url").also {
-            require(it.startsWith(RELEASE_PREFIX + "download/")) { "Unexpected asset repository" }
+        parseRelease(JSONObject(readUpdateText(RELEASE_API))) { url ->
+            readUpdateText(url, releaseAsset = true)
         }
-        val metadataAsset = asset("update.json") ?: return@withContext null
-        val checksumAsset = asset("SHA256SUMS") ?: return@withContext null
-        val metadata = JSONObject(readUpdateText(assetUrl(metadataAsset)))
-        val versionCode = metadata.getLong("versionCode")
-        val versionName = metadata.getString("versionName").trim().removePrefix("v")
-        val apkName = metadata.getString("apk")
-        val sha256 = metadata.getString("sha256").lowercase()
-        require(versionCode > 0 && versionName.isNotEmpty())
-        require(Regex("[A-Za-z0-9._-]+\\.apk").matches(apkName)) { "Invalid APK name" }
-        require(Regex("[0-9a-f]{64}").matches(sha256)) { "Invalid APK checksum" }
-        val apkAsset = asset(apkName) ?: return@withContext null
-        val apkSize = apkAsset.getLong("size")
-        require(apkSize in 1..MAX_UPDATE_APK_BYTES) { "Invalid APK size" }
-        AppReleaseInfo("v$versionName", releaseUrl, versionCode = versionCode,
-            apkName = apkName, apkUrl = assetUrl(apkAsset), apkSize = apkSize,
-            sha256 = sha256, checksumsUrl = assetUrl(checksumAsset))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Log.w("TgWsProxy", "Update check unavailable: ${e.javaClass.simpleName}")
         null
     }
+}
+
+internal fun parseRelease(release: JSONObject, readMetadata: (String) -> String): AppReleaseInfo? {
+    if (release.getBoolean("draft") || release.getBoolean("prerelease")) return null
+    val tag = release.getString("tag_name")
+    require(RELEASE_TAG.matches(tag)) { "Invalid release tag" }
+    val name = tag.removePrefix("v")
+    val apkName = "tgwsproxy-$name-arm64.apk"
+    val assets = release.getJSONArray("assets")
+    val available = (0 until assets.length()).map { assets.getJSONObject(it).getString("name") }
+    if (listOf("update.json", "SHA256SUMS", apkName).any { required -> available.count { it == required } != 1 }) {
+        return null
+    }
+    val metadata = JSONObject(readMetadata(RELEASE_PREFIX + "download/$tag/update.json"))
+    require(metadata.getString("versionName") == name && metadata.getString("apk") == apkName) {
+        "Update metadata does not describe this release"
+    }
+    require(Regex("[0-9a-fA-F]{64}").matches(metadata.getString("sha256"))) { "Invalid APK checksum" }
+    return AppReleaseInfo(tag, metadata.getLong("versionCode"))
 }
 
 fun isNewerVersion(local: String, remote: String): Boolean {
@@ -147,23 +136,30 @@ fun isNewerVersion(local: String, remote: String): Boolean {
     return false
 }
 
-internal const val MAX_UPDATE_APK_BYTES = 200L * 1024L * 1024L
-internal fun openUpdateConnection(url: String): HttpURLConnection {
+private fun openUpdateConnection(url: String): HttpURLConnection {
     require(URL(url).protocol == "https") { "HTTPS required for updates" }
     return (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 15_000
         readTimeout = 30_000
         useCaches = false
+        instanceFollowRedirects = false
         setRequestProperty("User-Agent", "DerigavaTGWS/${BuildConfig.VERSION_NAME}")
         setRequestProperty("Accept", if (url.startsWith("https://api.github.com/")) "application/vnd.github+json" else "application/octet-stream")
         setRequestProperty("Cache-Control", "no-cache")
     }
 }
 
-internal fun readUpdateText(url: String): String {
+private fun readUpdateText(url: String, releaseAsset: Boolean = false): String {
     val connection = openUpdateConnection(url)
     try {
-        if (connection.responseCode !in 200..299) throw IOException("Update server HTTP ${connection.responseCode}")
+        val status = connection.responseCode
+        if (releaseAsset && status in setOf(301, 302, 303, 307, 308)) {
+            val redirect = URL(connection.getHeaderField("Location") ?: throw IOException("Missing update redirect"))
+            require(redirect.protocol == "https" && redirect.host == "release-assets.githubusercontent.com" &&
+                redirect.userInfo == null && redirect.port in setOf(-1, 443)) { "Unexpected update redirect" }
+            return readUpdateText(redirect.toExternalForm())
+        }
+        if (status !in 200..299) throw IOException("Update server HTTP $status")
         connection.inputStream.use { stream ->
             val output = ByteArrayOutputStream()
             val buffer = ByteArray(8192)

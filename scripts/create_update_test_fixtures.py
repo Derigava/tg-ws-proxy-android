@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Create real signed APKs for the updater's Android security tests.
+"""Create APKs signed by test keys for package and signer checks.
 
-Run after assembling the debug target (so its debug signing key exists), then:
-  adb push build/tgws-updater-fixtures /data/local/tmp/
-The instrumentation tests stream fixtures through UiAutomation, avoiding app
-access to shell-owned storage. These fixtures must never be installed.
+Run after assembling the debug target so its debug key exists. The Android
+test runner checks that the OS rejects wrong-key.apk as an update.
 """
 import argparse
 from pathlib import Path

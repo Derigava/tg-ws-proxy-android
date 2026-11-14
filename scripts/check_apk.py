@@ -65,6 +65,10 @@ def check(apk: Path, abi: str) -> int:
         # Chaquopy stores cryptography, cffi and other extension modules inside
         # ZIP-compatible .imy archives; Android later loads their extracted .so.
         for item in archive.infolist():
+            if item.filename.startswith("assets/chaquopy/bootstrap-native/") and item.filename.endswith(".so"):
+                if item.filename.split("/")[3] != abi:
+                    raise ValueError(f"Unexpected bootstrap ABI: {item.filename}")
+                inspect(archive.read(item), item.filename)
             if item.filename.startswith("assets/chaquopy/") and item.filename.endswith(".imy"):
                 with zipfile.ZipFile(io.BytesIO(archive.read(item))) as python_archive:
                     for extension in python_archive.infolist():

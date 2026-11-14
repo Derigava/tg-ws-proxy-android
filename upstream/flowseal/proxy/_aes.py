@@ -17,8 +17,13 @@ try:
 except ImportError:
     import ctypes
     import ctypes.util
+    import sys
 
     def _load_libcrypto():
+        if hasattr(sys, "getandroidapilevel"):
+            # Chaquopy ships this OpenSSL library alongside its Python runtime.
+            return ctypes.CDLL("libcrypto_python.so")
+
         name = ctypes.util.find_library("crypto")
         candidates = []
         if name:

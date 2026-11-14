@@ -25,10 +25,8 @@ class EngineInstrumentedTest {
         val smoke = JSONObject(python.getModule("android_proxy").callAttr("self_test").toString())
         assertTrue(smoke.getBoolean("ok"))
         assertEquals(BuildConfig.CORE_VERSION, smoke.getString("core_version"))
-        assertEquals("42.0.8", smoke.getString("cryptography"))
-        val result = python.getModule("builtins").callAttr("eval",
-            "__import__('cryptography.hazmat.primitives.ciphers', fromlist=['Cipher']).Cipher(__import__('cryptography.hazmat.primitives.ciphers.algorithms', fromlist=['AES']).AES(bytes(16)), __import__('cryptography.hazmat.primitives.ciphers.modes', fromlist=['CTR']).CTR(bytes(16))).encryptor().update(bytes(16)).hex()", python.getModule("builtins").callAttr("dict"))
-        assertEquals("66e94bd4ef8a2c3b884cfa59ca342b2e", result.toString())
+        assertTrue(smoke.getString("openssl").startsWith("OpenSSL "))
+        assertNull(python.getModule("importlib.util").callAttr("find_spec", "cryptography"))
         python.getModule("proxy.h2_transport")
         python.getModule("proxy.fake_tls")
         python.getModule("proxy.raw_websocket")

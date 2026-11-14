@@ -28,7 +28,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.amurcanov.tgwsproxy.ApkInstaller
 import com.amurcanov.tgwsproxy.AppReleaseInfo
 import com.amurcanov.tgwsproxy.AppUpdateRepository
 import com.amurcanov.tgwsproxy.BuildConfig
@@ -38,7 +37,7 @@ import com.amurcanov.tgwsproxy.ProxyJournal
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_POSTPONED
-import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_UPDATE
+import com.amurcanov.tgwsproxy.UPDATE_DIALOG_ACTION_RELEASE_OPENED
 import com.amurcanov.tgwsproxy.isNewerVersion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,7 +55,6 @@ fun InfoTab(settingsStore: SettingsStore) {
     val scope = rememberCoroutineScope()
     var showHelpDialog by remember { mutableStateOf(false) }
     var isCheckingUpdates by remember { mutableStateOf(false) }
-    var updateBusy by remember { mutableStateOf(false) }
     var pendingManualRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
     val savedPort by settingsStore.port.collectAsStateWithLifecycle(initialValue = "1443")
     val savedPoolSize by settingsStore.poolSize.collectAsStateWithLifecycle(initialValue = 4)
@@ -228,7 +226,6 @@ fun InfoTab(settingsStore: SettingsStore) {
     pendingManualRelease?.let { release ->
         AppUpdateDialog(
             release = release,
-            busy = updateBusy,
             onPostpone = {
                 pendingManualRelease = null
                 Toast.makeText(context, context.getString(R.string.update_postponed_24h), Toast.LENGTH_SHORT).show()
@@ -245,24 +242,18 @@ fun InfoTab(settingsStore: SettingsStore) {
                     )
                 }
             },
-            onUpdate = {
-                updateBusy = true
-                scope.launch {
-                    try {
-                        val apk = ApkInstaller.prepare(context, release)
-                        if (ApkInstaller.install(context, apk)) pendingManualRelease = null
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Toast.makeText(context, e.message ?: context.getString(R.string.update_install_failed), Toast.LENGTH_LONG).show()
-                    } finally {
-                        updateBusy = false
+            onOpenRelease = {
+                if (openUrlInBrowser(context, release.releaseUrl)) {
+                    pendingManualRelease = null
+                    scope.launch {
+                        settingsStore.saveUpdateDialogAction(
+                            version = release.versionTag,
+                            action = UPDATE_DIALOG_ACTION_RELEASE_OPENED,
+                            actedAt = System.currentTimeMillis()
+                        )
                     }
-                    settingsStore.saveUpdateDialogAction(
-                        version = release.versionTag,
-                        action = UPDATE_DIALOG_ACTION_UPDATE,
-                        actedAt = System.currentTimeMillis()
-                    )
+                } else {
+                    Toast.makeText(context, R.string.update_open_failed, Toast.LENGTH_LONG).show()
                 }
             }
         )

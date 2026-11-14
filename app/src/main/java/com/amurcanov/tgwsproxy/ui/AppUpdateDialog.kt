@@ -14,23 +14,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.amurcanov.tgwsproxy.AppReleaseInfo
 import com.amurcanov.tgwsproxy.R
-import com.amurcanov.tgwsproxy.RemoteVersionSource
 
 @Composable
 fun AppUpdateDialog(
     release: AppReleaseInfo,
     onPostpone: () -> Unit,
-    onUpdate: () -> Unit,
-    busy: Boolean = false
+    onOpenRelease: () -> Unit
 ) {
-    val isTagOnly = release.source == RemoteVersionSource.Tag
-    val title = stringResource(if (isTagOnly) R.string.update_new_tag_title else R.string.update_available_title)
-    val description = if (isTagOnly) {
-        stringResource(R.string.update_new_tag_description, release.versionTag)
-    } else {
-        stringResource(R.string.update_available_description, release.versionTag)
-    }
-
+    val title = stringResource(R.string.update_available_title)
     BrandDialog(
         onDismiss = {},
         dismissible = false,
@@ -40,12 +31,12 @@ fun AppUpdateDialog(
         Spacer(Modifier.height(8.dp))
         Text(release.versionTag, style = MaterialTheme.typography.headlineSmall, color = Brand.ink)
         Spacer(Modifier.height(12.dp))
-        Text(description, style = MaterialTheme.typography.bodyMedium, color = Brand.muted)
+        Text(stringResource(R.string.update_available_description, release.versionTag),
+            style = MaterialTheme.typography.bodyMedium, color = Brand.muted)
         Spacer(Modifier.height(20.dp))
         BrandButton(
-            text = stringResource(if (busy) R.string.update_downloading else R.string.update_action),
-            onClick = onUpdate,
-            enabled = !busy,
+            text = stringResource(R.string.update_action),
+            onClick = onOpenRelease,
             trailing = "→"
         )
         Spacer(Modifier.height(8.dp))
@@ -54,7 +45,7 @@ fun AppUpdateDialog(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            MonoAction(text = stringResource(R.string.later), onClick = onPostpone, enabled = !busy)
+            MonoAction(text = stringResource(R.string.later), onClick = onPostpone)
         }
     }
 }

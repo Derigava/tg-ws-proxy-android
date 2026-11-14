@@ -41,6 +41,7 @@ import com.amurcanov.tgwsproxy.ui.InfoTab
 import com.amurcanov.tgwsproxy.ui.LogsTab
 import com.amurcanov.tgwsproxy.ui.SettingsTab
 import com.amurcanov.tgwsproxy.ui.TgWsProxyTheme
+import com.amurcanov.tgwsproxy.ui.openUrlInBrowser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -121,7 +122,6 @@ fun MainContent(settingsStore: SettingsStore) {
     val updateLastCheckAt by settingsStore.updateLastCheckAt.collectAsStateWithLifecycle(initialValue = 0L)
     val cachedRelease by settingsStore.updateLatestRelease.collectAsStateWithLifecycle(initialValue = null)
     var pendingRelease by remember { mutableStateOf<AppReleaseInfo?>(null) }
-    var updateBusy by remember { mutableStateOf(false) }
     val currentVersion = remember { "v${BuildConfig.VERSION_NAME.removePrefix("v")}" }
     val currentUpdatePostponeUntil by rememberUpdatedState(updatePostponeUntil)
     val currentUpdatePostponeVersion by rememberUpdatedState(updatePostponeVersion)
@@ -276,7 +276,6 @@ fun MainContent(settingsStore: SettingsStore) {
     pendingRelease?.let { release ->
         AppUpdateDialog(
             release = release,
-            busy = updateBusy,
             onPostpone = {
                 pendingRelease = null
                 Toast.makeText(context, context.getString(R.string.update_postponed_24h), Toast.LENGTH_SHORT).show()
@@ -293,24 +292,18 @@ fun MainContent(settingsStore: SettingsStore) {
                     )
                 }
             },
-            onUpdate = {
-                updateBusy = true
-                scope.launch {
-                    try {
-                        val apk = ApkInstaller.prepare(context, release)
-                        if (ApkInstaller.install(context, apk)) pendingRelease = null
-                    } catch (e: kotlinx.coroutines.CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Toast.makeText(context, e.message ?: context.getString(R.string.update_install_failed), Toast.LENGTH_LONG).show()
-                    } finally {
-                        updateBusy = false
+            onOpenRelease = {
+                if (openUrlInBrowser(context, release.releaseUrl)) {
+                    pendingRelease = null
+                    scope.launch {
+                        settingsStore.saveUpdateDialogAction(
+                            version = release.versionTag,
+                            action = UPDATE_DIALOG_ACTION_RELEASE_OPENED,
+                            actedAt = System.currentTimeMillis()
+                        )
                     }
-                    settingsStore.saveUpdateDialogAction(
-                        version = release.versionTag,
-                        action = UPDATE_DIALOG_ACTION_UPDATE,
-                        actedAt = System.currentTimeMillis()
-                    )
+                } else {
+                    Toast.makeText(context, R.string.update_open_failed, Toast.LENGTH_LONG).show()
                 }
             }
         )

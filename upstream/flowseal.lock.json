@@ -3,10 +3,13 @@
   "tag": "v1.11.4",
   "commit": "2085861957070eeea07990a522b29f42e5230210",
   "core_version": "1.11.4",
+  "android_patch_base": {
+    "proxy/_aes.py": "5b07f23c1d65140fb933e2c31d42817012d2ff4b60664f69146fe2554d54d528"
+  },
   "files": {
     "LICENSE": "2a98256df06052c3b132cf522e356da90ade2f749b6f7435f7cdafd1d9123fa2",
     "proxy/__init__.py": "dc664a26150f0b0dc02503b3481c87e7457dd54786bb9329cea0663fdb666f0d",
-    "proxy/_aes.py": "5b07f23c1d65140fb933e2c31d42817012d2ff4b60664f69146fe2554d54d528",
+    "proxy/_aes.py": "7eb76059f71f90ea4abeb85237915adf8a8dfd952c3529ecba0194dd839a3745",
     "proxy/balancer.py": "3d4330488b968e146286b14790c0814eae3efe5d0f26206572369ca6368eed24",
     "proxy/bridge.py": "f857f231472a605df07c9fb5cf4f5661230400c24a1bc46baf9f535f326c5979",
     "proxy/cf_h2.py": "9c2c2b63add1a2568ef472ca9631c55e81a581fbadcc67c322c42fe46ec8b054",

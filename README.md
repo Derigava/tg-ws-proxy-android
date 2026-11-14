@@ -28,7 +28,7 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 ## Установка
 
 1. Скачай `tgwsproxy-*-arm64.apk` из [последнего релиза](https://github.com/Derigava/tg-ws-proxy-android/releases/latest) и установи. Нужны Android 7.0+ и ARM64.
-2. Открой приложение и разреши то, что оно попросит: уведомления и работу без экономии заряда. Зачем это нужно, написано в разделе [«Доступы»](#доступы).
+2. Открой приложение и разреши уведомления, чтобы видеть состояние прокси и останавливать его из шторки. Параметры работы в фоне описаны в разделе [«Доступы»](#доступы).
 3. Нажми кнопку со значком питания и дождись `[OK] ПОДКЛЮЧЕНО`.
 4. Нажми «Применить в Telegram» и подтверди подключение в клиенте. Если клиентов несколько, приложение спросит, какой открыть.
 
@@ -53,22 +53,21 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 | `io.github.derigava.tgwsproxy.action.STOP` | Останавливает прокси |
 | `io.github.derigava.tgwsproxy.action.TOGGLE` | Переключает |
 
-Так можно, например, включать прокси при открытии Telegram и выключать при выходе.
+Запросы от приложений автоматизации требуют подтверждения на экране. Ярлыки рабочего стола и плитка применяют действие по нажатию.
 
 ## Доступы
 
 | Что | Зачем | Что будет без этого |
 |---|---|---|
 | Уведомления | Показывают, что прокси запущен, и дают кнопки перезапуска и остановки | Прокси работает, но управлять им из шторки нельзя |
-| Без экономии заряда | Android не усыпляет прокси при выключенном экране | Telegram теряет соединение в фоне |
+| Экономия заряда | При остановках прокси с выключенным экраном открывает системный список оптимизации батареи | На некоторых устройствах Android может приостанавливать прокси в фоне |
 | Автозапуск в прошивке | Xiaomi, Huawei, Honor, Oppo, realme, OnePlus, Vivo и Asus держат свой список. Строка появляется только на этих устройствах | Прошивка может завершить приложение. Статус прочитать нельзя, проверь вручную |
-| Установка обновлений | Ставит новые версии из приложения | Обновление придётся скачивать и ставить вручную |
 
 Текущее состояние видно в разделе «Настройки → Доступы». На Samsung отключения экономии заряда обычно хватает, но проверь, что приложения нет в списке спящих.
 
 ## Обновления
 
-Приложение раз в 12 часов проверяет последний релиз через WorkManager. APK скачивается только после нажатия «Обновить». Перед установкой приложение сверяет размер, SHA-256 из `SHA256SUMS`, имя пакета, версию и сертификат подписи, а саму установку подтверждаешь в Android.
+Приложение раз в 12 часов проверяет сведения о последнем релизе через WorkManager. Кнопка «Открыть релиз на GitHub» открывает страницу этого тега. Скачай APK со страницы релиза и установи его через Android. Android проверяет подпись при обновлении установленного пакета.
 
 Сертификат подписи, SHA-256:
 
@@ -76,22 +75,27 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
 ```
 
-Проверить скачанный файл:
+Проверить скачанный файл и сравнить его хеш с `SHA256SUMS` в том же релизе:
 
 ```bash
-apksigner verify --print-certs tgwsproxy-*-arm64.apk
+sha256sum -c SHA256SUMS
+apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 ```
 
 ## Как выходят релизы
 
-Ядро лежит в `upstream/flowseal` без правок, а `upstream/flowseal.lock.json` фиксирует тег, commit и SHA-256 всех файлов. GitHub Actions раз в сутки проверяет стабильные релизы Flowseal. Новое ядро проходит такой путь:
+В `upstream/flowseal.lock.json` записаны тег, коммит и SHA-256 всех файлов ядра. Единственная правка в снимке Flowseal выбирает встроенную библиотеку OpenSSL Chaquopy для AES на Android. GitHub Actions раз в сутки показывает доступный тег Flowseal. Чтобы обновить ядро, выполни `python scripts/sync_upstream.py --ref vX.Y.Z`, проверь изменения и внеси их в `main`.
+
+Для выпуска запусти workflow **Android checks and releases** на `main` с включённым `publish_release`. Он выполняет следующие шаги.
 
 1. Python-тесты ядра и адаптера.
 2. Сборка ARM64 APK и проверка нативных библиотек на страницы памяти 16 КБ.
 3. Запуск оптимизированного релиза на эмуляторах API 24 и API 35 с 16 КБ, затем инструментальные тесты.
-4. Подпись в отдельной задаче, куда попадает только проверенный APK, и публикация релиза.
+4. Сверка хеша проверенного APK, подпись прежним сертификатом и публикация. К публичному APK GitHub Actions добавляет аттестацию происхождения.
 
 Если что-то падает, релиз не выходит и рабочая версия остаётся на месте.
+
+Для проверки Play Защитой владелец репозитория может запустить этот workflow с `play_protect_recipient`. В поле передаётся сертификат получателя в PEM, закодированный в Base64. После тестов Actions подписывает ARM64 APK релизным ключом и сохраняет зашифрованный CMS-артефакт на сутки. Его можно расшифровать локально командой `openssl cms -decrypt -binary -inform DER -in play-protect-preview.der -recip recipient.pem -inkey recipient.key -out preview.apk`.
 
 Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, а CI берёт следующий свободный патч, например `1.1.0`, затем `1.1.1`. Для новой линейки достаточно поменять `VERSION`. Что изменилось, описано в [CHANGELOG.md](CHANGELOG.md). Раздел с номером версии попадает в начало текста релиза.
 
@@ -118,6 +122,8 @@ python scripts/sync_upstream.py --check
 - Приложение неофициальное и не связано с Telegram.
 - Это прокси для Telegram, а не системный VPN: другой трафик через него не идёт.
 - Прокси слушает `127.0.0.1`, поэтому доступен только на этом телефоне. Адрес `0.0.0.0` в настройках открывает его всей локальной сети.
+- При первом применении выбери клиент, которому передать адрес, порт и секрет. Приложение запоминает выбор вместе с подписью клиента.
+- Прокси подключается к Telegram и в зависимости от настроек использует твой Worker или общий Cloudflare-прокси. Оператор промежуточного узла может видеть IP и параметры соединения. Flowseal обновляет список общих доменов с GitHub.
 - Работа зависит от маршрута, DNS и провайдера. Если подключение висит, перезапусти прокси и сравни с включённым и выключенным Cloudflare.
 - При сбое переключения сети или пропаже интернета прокси сам сбрасывает накопленные задержки маршрутов, перезапуск не нужен.
 - Нашёл ошибку — приложи отчёт из «Инфо → Собрать отчёт», секрета в нём нет. В нём ошибки и события за 24 часа из журнала, который ведётся и в фоне. Для долгих отвалов приложи файл из «Инфо → Поделиться журналом»: секрет и домены воркеров в нём замаскированы. Об уязвимостях пиши по правилам из [SECURITY.md](SECURITY.md).
@@ -133,13 +139,13 @@ python scripts/sync_upstream.py --check
 
 ## English
 
-TG WS Proxy runs a local MTProto proxy on your phone, and Telegram connects to it like any other proxy. No root or VPN needed. The engine is the unmodified Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy); the Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
+TG WS Proxy runs a local MTProto proxy on your phone. It uses the Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) with an Android AES library selection. The Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
 
 1. Download `tgwsproxy-*-arm64.apk` from the [latest release](https://github.com/Derigava/tg-ws-proxy-android/releases/latest). It needs Android 7.0+ and ARM64.
-2. Open the app and allow notifications and running without battery optimization, so Android doesn't stop the proxy with the screen off.
+2. Open the app and allow notifications to see the proxy status and stop it from the notification.
 3. Tap the power button and wait for `[OK] CONNECTED`.
-4. Tap "Apply in Telegram" and confirm in the client.
+4. Tap "Apply in Telegram", choose the client that will receive the proxy secret, and confirm in the client.
 
-Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts; automation apps can start `com.amurcanov.tgwsproxy.ProxyShortcutActivity` in package `io.github.derigava.tgwsproxy` with action `io.github.derigava.tgwsproxy.action.START`, `.STOP` or `.TOGGLE`.
+Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts. Automation intents for `com.amurcanov.tgwsproxy.ProxyShortcutActivity` require confirmation.
 
-The in-app updater checks the latest release every 12 hours. It verifies the size, SHA-256, package name, version and signing certificate before Android asks you to confirm the install. The app is unofficial and not affiliated with Telegram. Switch the language in Settings.
+The app checks GitHub release metadata every 12 hours. Open the release page to download the APK and confirm installation in Android. The app is unofficial and independent of Telegram. Switch the language in Settings.

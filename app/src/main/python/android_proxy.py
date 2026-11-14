@@ -13,12 +13,14 @@ import logging
 import logging.handlers
 import os
 import re
+import ssl
 import threading
 import time
 from collections import deque
 
 from proxy import __version__ as CORE_VERSION
 from proxy import config as core_config
+from proxy import raw_websocket
 from proxy import tg_ws_proxy as core
 from proxy.stats import stats as core_stats
 
@@ -32,6 +34,22 @@ LOG_FILE_BYTES = 512 * 1024
 LOG_FILE_BACKUPS = 2
 _LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO,
                "warn": logging.WARNING, "error": logging.ERROR}
+
+
+class _TelegramFrontingSocket(ssl.SSLObject):
+    def do_handshake(self):
+        super().do_handshake()
+        # The alternate SNI can return Telegram's apex certificate. Check
+        # Telegram's identity in addition to the existing CA-chain validation.
+        names = ("telegram.org", "web.telegram.org", "*.web.telegram.org")
+        if not any(kind == "DNS" and name.lower() in names
+                   for kind, name in self.getpeercert().get("subjectAltName", ())):
+            raise ssl.SSLCertVerificationError("Fronted WebSocket certificate does not identify Telegram")
+
+
+# Only Flowseal's alternate-SNI path uses this context. Ordinary WSS retains
+# the TLS library's standard hostname check.
+raw_websocket._ssl_ctx_fronting.sslobject_class = _TelegramFrontingSocket
 
 
 def _redact(message):
@@ -401,9 +419,7 @@ def network_changed():
 
 def self_test():
     """Offline native-dependency smoke check, also used on Android devices."""
-    import cryptography
     import httpx
-    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
     from proxy._aes import Cipher, algorithms, modes
     from proxy.utils import create_ssl_context
 
@@ -413,9 +429,9 @@ def self_test():
     actual = Cipher(algorithms.AES(key), modes.CTR(iv)).encryptor().update(plain)
     if actual.hex() != "601ec313775789a5b7a7f504bbf3d228":
         raise RuntimeError("AES-256-CTR native smoke test failed")
-    X25519PrivateKey.generate().public_key()
     context = create_ssl_context()
+    context.set_ecdh_curve("X25519")
     with httpx.Client(http2=True, verify=context):
         pass
     return json.dumps({"ok": True, "core_version": CORE_VERSION,
-                       "cryptography": cryptography.__version__, "httpx": httpx.__version__})
+                       "openssl": ssl.OPENSSL_VERSION, "httpx": httpx.__version__})
