@@ -1,4 +1,4 @@
-"""Reject APKs containing native ELF segments incompatible with 16 KB pages."""
+"""Reject APKs with 16 KB-incompatible natives or package-installer code."""
 from __future__ import annotations
 
 import argparse
@@ -6,6 +6,20 @@ import io
 from pathlib import Path
 import struct
 import zipfile
+
+# Play Protect classifies sideloaded apps that can download or install other
+# packages as potentially harmful. The release no longer contains any of these
+# capabilities; fail the build if one returns through code, a dependency or a
+# resource merge.
+FORBIDDEN_DEX_TOKENS = {
+    b"REQUEST_INSTALL_PACKAGES": "install-packages permission",
+    b"REQUEST_IGNORE_BATTERY_OPTIMIZATIONS": "battery-exemption permission",
+    b"application/vnd.android.package-archive": "APK installer intent type",
+    b"canRequestPackageInstalls": "unknown-app-sources check",
+    b"PackageInstaller": "package installer API",
+    b"ACTION_INSTALL_PACKAGE": "install intent action",
+    b"ACTION_MANAGE_UNKNOWN_APP_SOURCES": "unknown-app-sources settings",
+}
 
 
 def load_alignments(data: bytes) -> list[int]:
@@ -79,9 +93,26 @@ def check(apk: Path, abi: str) -> int:
     return count
 
 
+def check_no_package_installer(apk: Path) -> int:
+    """Reject DEX code that can install APKs or request dangerous exemptions."""
+    with zipfile.ZipFile(apk) as archive:
+        dex_files = [item for item in archive.infolist() if item.filename.endswith(".dex")]
+        if not dex_files:
+            raise ValueError("APK contains no DEX code")
+        for item in dex_files:
+            data = archive.read(item)
+            for token, label in FORBIDDEN_DEX_TOKENS.items():
+                if token in data:
+                    raise ValueError(f"{item.filename}: contains {label} ({token.decode()})")
+    return len(dex_files)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--abi", choices=("arm64-v8a", "x86_64"), default="arm64-v8a")
     options = parser.parse_args()
-    print(f"16 KB compatibility: {check(options.apk, options.abi)} native libraries passed")
+    native = check(options.apk, options.abi)
+    dex = check_no_package_installer(options.apk)
+    print(f"16 KB compatibility: {native} native libraries passed")
+    print(f"Package installer check: {dex} DEX file(s) passed")

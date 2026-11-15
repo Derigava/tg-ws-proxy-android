@@ -136,6 +136,8 @@ jobs:
           mkdir -p unsigned
           cp app/build/outputs/apk/arm64/release/*-unsigned.apk unsigned/app-arm64-unsigned.apk
           python scripts/check_apk.py unsigned/app-arm64-unsigned.apk
+          AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2" \
+            python scripts/check_permissions.py unsigned/app-arm64-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 unsigned/app-arm64-unsigned.apk
           echo "apk_sha256=$(sha256sum unsigned/app-arm64-unsigned.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - name: Pass only verified APK to signing job

@@ -82,6 +82,33 @@ sha256sum -c SHA256SUMS
 apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 ```
 
+## Play Protect и установка вне Google Play
+
+Приложение ставится APK, поэтому Play Защита проверяет его как приложение из интернета. Начиная с 1.1.1 сборка не запрашивает `REQUEST_INSTALL_PACKAGES` и `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, не скачивает и не устанавливает APK: кнопка обновления открывает страницу релиза в браузере, установку подтверждает Android.
+
+В 1.1.0 был встроенный self-update, и Play Защита блокировала установку как «вредоносное приложение». Это ложная классификация: приложение не собирает данные и не имеет чувствительных разрешений. В текущей версии возможности установки APK удалены, а CI проверяет, что они не вернутся.
+
+Официальная сборка называется `TG WS Proxy`, сертификат подписи SHA-256:
+
+```text
+6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
+```
+
+Проверить скачанный файл:
+
+```bash
+sha256sum -c SHA256SUMS
+apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
+```
+
+Если Play Защита блокирует установку официальной сборки:
+
+- нажми «Подробнее» → «Всё равно установить», если кнопка доступна;
+- если кнопки нет, пришли версию Android, имя APK, SHA-256 и откуда скачан файл: это ложное срабатывание, его снимает [апелляция в Google](https://support.google.com/googleplay/android-developer/contact/protectappeals). Шаблон и подробности — в [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md);
+- не отключай Play Защиту целиком и не устанавливай APK из сторонних источников.
+
+Предупреждение «неизвестное приложение» для sideload-сборки — нормальное; оно не означает, что в APK есть вредоносный код.
+
 ## Как выходят релизы
 
 В `upstream/flowseal.lock.json` записаны тег, коммит и SHA-256 всех файлов ядра. Единственная правка в снимке Flowseal выбирает встроенную библиотеку OpenSSL Chaquopy для AES на Android. GitHub Actions раз в сутки показывает доступный тег Flowseal. Чтобы обновить ядро, выполни `python scripts/sync_upstream.py --ref vX.Y.Z`, проверь изменения и внеси их в `main`.
@@ -149,3 +176,5 @@ TG WS Proxy runs a local MTProto proxy on your phone. It uses the Python core of
 Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts. Automation intents for `com.amurcanov.tgwsproxy.ProxyShortcutActivity` require confirmation.
 
 The app checks GitHub release metadata every 12 hours. Open the release page to download the APK and confirm installation in Android. The app is unofficial and independent of Telegram. Switch the language in Settings.
+
+Sideloaded builds may trigger Play Protect. Since 1.1.1 the app requests no install or battery-exemption permissions, never downloads or installs APKs, and only opens the GitHub release page. Verify the official APK with `SHA256SUMS` and the signing certificate above; see [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md) if Play Protect blocks installation.

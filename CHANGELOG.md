@@ -2,6 +2,19 @@
 
 Раздел с номером собираемой версии попадает в начало текста релиза на GitHub. Линейка версий задаётся в файле `VERSION`, патч CI подбирает сам.
 
+## 1.1.1
+
+### Play Protect
+
+- Убраны `REQUEST_INSTALL_PACKAGES` и `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: приложение больше не скачивает и не устанавливает APK и не просит исключение из экономии заряда.
+- Обновление теперь только вручную: страница релиза открывается в браузере, установку подтверждает Android. Встроенный self-update удалён.
+- CI проверяет манифест и DEX: запрещённые разрешения и строки установщика валят сборку.
+- Если Play Protect всё ещё блокирует установку, пришли версию Android, имя APK, SHA-256 и откуда скачан файл — подробности в `docs/PLAY_PROTECT.md`.
+
+### English
+
+No self-updater, install permission or battery-exemption request. Updates are manual from the GitHub release page, and CI rejects any future installer capability. If Play Protect still blocks the APK, report the Android version, APK name, SHA-256 and download source.
+
 ## 1.1.0
 
 ### Свой Cloudflare

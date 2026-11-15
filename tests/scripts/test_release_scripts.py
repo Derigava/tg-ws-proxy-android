@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import struct
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ def module(name):
 sync = module("sync_upstream")
 apk_check = module("check_apk")
 metadata = module("release_metadata")
+permissions = module("check_permissions")
 
 
 def elf(alignment=16384):
@@ -127,6 +129,75 @@ class ApkTests(unittest.TestCase):
                 archive.writestr("assets/chaquopy/requirements-arm64-v8a.imy", nested.getvalue())
             with self.assertRaisesRegex(ValueError, "architecture"):
                 apk_check.check(apk, "arm64-v8a")
+
+    def test_dex_with_package_installer_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("classes.dex", b"dex\n035\x00application/vnd.android.package-archive\x00")
+            with self.assertRaisesRegex(ValueError, "installer"):
+                apk_check.check_no_package_installer(apk)
+
+    def test_dex_with_install_permission_string_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("classes.dex", b"dex\n035\x00REQUEST_INSTALL_PACKAGES\x00")
+            with self.assertRaisesRegex(ValueError, "install-packages"):
+                apk_check.check_no_package_installer(apk)
+
+    def test_clean_dex_passes_installer_check(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("classes.dex", b"dex\n035\x00proxy-engine\x00")
+            self.assertEqual(apk_check.check_no_package_installer(apk), 1)
+
+    def test_apk_without_dex_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("AndroidManifest.xml", b"manifest")
+            with self.assertRaisesRegex(ValueError, "no DEX"):
+                apk_check.check_no_package_installer(apk)
+
+
+class PermissionTests(unittest.TestCase):
+    badging = (
+        "package: name='io.github.derigava.tgwsproxy' versionCode='1051' versionName='1.1.1'\n"
+        "uses-permission: name='android.permission.INTERNET'\n"
+        "uses-permission: name='android.permission.ACCESS_NETWORK_STATE'\n"
+        "uses-permission: name='io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'\n"
+    )
+
+    def test_badging_parser_reads_package_and_permissions(self):
+        self.assertEqual(permissions.parse_package(self.badging), "io.github.derigava.tgwsproxy")
+        self.assertEqual(permissions.parse_permissions(self.badging), {
+            "android.permission.INTERNET",
+            "android.permission.ACCESS_NETWORK_STATE",
+            "io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+        })
+
+    def test_expected_permissions_pass(self):
+        permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")
+
+    def test_install_permission_is_named_in_the_error(self):
+        declared = permissions.parse_permissions(self.badging) | {"android.permission.REQUEST_INSTALL_PACKAGES"}
+        with self.assertRaisesRegex(ValueError, "REQUEST_INSTALL_PACKAGES"):
+            permissions.check(declared, "io.github.derigava.tgwsproxy")
+
+    def test_unexpected_permission_is_rejected(self):
+        declared = permissions.parse_permissions(self.badging) | {"android.permission.READ_CONTACTS"}
+        with self.assertRaisesRegex(ValueError, "Unexpected permission"):
+            permissions.check(declared, "io.github.derigava.tgwsproxy")
+
+
+class ManifestTests(unittest.TestCase):
+    def test_source_manifest_has_no_forbidden_permissions(self):
+        manifest = (ROOT / "app" / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
+        declared = set(re.findall(r'<uses-permission\s+android:name="([^"]+)"', manifest))
+        self.assertFalse(declared & permissions.FORBIDDEN)
+        self.assertLessEqual(declared, permissions.ALLOWED)
 
 
 if __name__ == "__main__":
