@@ -2,6 +2,18 @@
 
 Раздел с номером собираемой версии попадает в начало текста релиза на GitHub. Линейка версий задаётся в файле `VERSION`, патч CI подбирает сам.
 
+## 1.1.2
+
+### Обход перестал работать в режиме CloudFlare CDN
+
+- С включённым CloudFlare CDN приложение не задавало адресов DC, и единственным маршрутом оставались общие CF-домены. Когда они перестали отвечать, Telegram не подключался вообще, хотя на ПК всё работало.
+- Теперь «Адреса DC: авто» — то же, что на ПК: прямой WebSocket к DC2 и DC4 идёт первым, CF остаётся запасным маршрутом. Ручные адреса DC при выключенном CF работают как раньше.
+- Если ни один CF-домен не ответил, CF-маршрут пропускается на 30 секунд (дальше до 5 минут), а не перебирается заново для каждого соединения по 10 секунд на домен. Успешное подключение через CF или смена сети снимает паузу сразу.
+
+### English
+
+With CloudFlare CDN on, the app sent no DC addresses, so the shared CF domains were the only route and their outage cut Telegram off. Auto now matches the desktop proxy: direct WebSocket to DC2 and DC4 first, CF as fallback. When no CF domain answers, the CF route is skipped with backoff (30 s up to 5 min) instead of being walked again for every connection; a CF success or a network change clears it.
+
 ## 1.1.1
 
 ### Play Protect
