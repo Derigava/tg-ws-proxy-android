@@ -26,7 +26,7 @@
     <string name="language">Язык</string>
     <string name="settings">Настройки</string>
     <string name="ip_and_port">IP и порт</string>
-    <string name="auto_cf_enabled">Адреса DC: авто, включён CF</string>
+    <string name="auto_cf_enabled">Адреса DC: авто (DC2, DC4), CF запасной</string>
     <string name="configure_dc_addresses">Настроить адреса DC</string>
     <string name="ws_pool">Пул WS</string>
     <string name="secret_key">Секретный ключ</string>
@@ -77,8 +77,8 @@
     <string name="unofficial_notice">// НЕОФИЦИАЛЬНОЕ ПРИЛОЖЕНИЕ, НЕ СВЯЗАНО С TELEGRAM</string>
     <string name="update_postponed_24h">Обновление отложено на 24 часа</string>
     <string name="help_auto_dc_title">Авто и адреса датацентров</string>
-    <string name="help_auto_dc_text">С включённым Cloudflare ручные адреса DC обычно не нужны: прокси идёт по CF-маршруту. Если Cloudflare выключен, соединение идёт напрямую на DC Telegram, и адреса можно задать вручную. Обычно хватает DC2 и DC4, остальные нужны для ручной настройки и диагностики.</string>
-    <string name="help_cloudflare_text">Режим направляет соединение через WebSocket-домены за Cloudflare. В части мобильных сетей он стабильнее, но результат зависит от маршрута, DNS и провайдера. Если подключение стало дольше, сравни работу с выключенным CF.</string>
+    <string name="help_auto_dc_text">С включённым Cloudflare адреса DC задаются автоматически, как на ПК: сначала прямой WebSocket к DC2 и DC4, а если он недоступен — CF-маршрут. Если Cloudflare выключен, соединение идёт только напрямую на DC Telegram, и адреса можно задать вручную. Обычно хватает DC2 и DC4, остальные нужны для ручной настройки и диагностики.</string>
+    <string name="help_cloudflare_text">Режим добавляет запасной маршрут через WebSocket-домены за Cloudflare: он используется, когда прямое подключение к DC недоступно. В части мобильных сетей это помогает, но результат зависит от маршрута, DNS и провайдера. Если ни один CF-домен не отвечает, маршрут на время пропускается. Если подключение стало дольше, сравни работу с выключенным CF.</string>
     <string name="help_ws_pool_text">Число заранее подготовленных WebSocket-соединений. Большой пул может уменьшить задержку при первом подключении и загрузке медиа, но добавляет фоновых соединений. Обычно хватает 2–4. Повышай, только если видишь пользу в своей сети.</string>
     <string name="help_secret_key_text">16-байтовый ключ шифрования MTProto. Меняй его, только если ссылка для подключения попала к посторонним.</string>
     <string name="help_experimental_text">Открывает ручную настройку всех обычных и медиа-датацентров: DC1, DC3, DC5, DC203 и их медиа-вариантов. Нужен для диагностики, тестов и нестандартных маршрутов. Без такой задачи держи его выключенным.</string>

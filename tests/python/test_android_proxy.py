@@ -186,6 +186,47 @@ class AdapterLifecycleTests(unittest.TestCase):
         with socket.create_connection(("127.0.0.1", settings["port"]), timeout=1):
             pass
 
+    def test_cf_route_is_skipped_after_full_miss_then_restored(self):
+        bridge = sys.modules["proxy.bridge"]
+        self.assertIs(bridge._cfproxy_fallback, adapter._cf_breaker)
+        calls = []
+        results = [False, True]
+
+        async def fake_cf(*args, **kwargs):
+            calls.append(args)
+            return results.pop(0)
+
+        breaker = adapter._CfRouteBreaker(fake_cf)
+        clock = [1000.0]
+        with patch.object(adapter.time, "monotonic", lambda: clock[0]):
+            self.assertFalse(asyncio.run(breaker(1)))  # Every domain missed.
+            self.assertEqual(breaker.retry_after, 1000.0 + adapter.CF_BACKOFF_INITIAL)
+            self.assertFalse(asyncio.run(breaker(2)))  # Skipped without a walk.
+            self.assertEqual(len(calls), 1)
+            clock[0] += adapter.CF_BACKOFF_INITIAL
+            self.assertTrue(asyncio.run(breaker(3)))
+            self.assertEqual((breaker.failures, breaker.retry_after), (0, 0.0))
+
+    def test_cf_backoff_grows_to_cap_and_network_change_clears_it(self):
+        async def always_miss(*args, **kwargs):
+            return False
+
+        breaker = adapter._CfRouteBreaker(always_miss)
+        clock = [0.0]
+        with patch.object(adapter.time, "monotonic", lambda: clock[0]):
+            delays = []
+            for _ in range(6):
+                asyncio.run(breaker())
+                delays.append(breaker.retry_after - clock[0])
+                clock[0] = breaker.retry_after
+        self.assertEqual(delays, [30.0, 60.0, 120.0, 240.0, 300.0, 300.0])
+
+        self.assertTrue(json.loads(adapter.start(json.dumps(config())))["running"])
+        adapter._cf_breaker.failures = 5
+        adapter._cf_breaker.retry_after = time.monotonic() + 3600
+        self.assertTrue(adapter.network_changed())
+        self.assertEqual((adapter._cf_breaker.failures, adapter._cf_breaker.retry_after), (0, 0.0))
+
     def test_repeated_start_stop_has_no_thread_or_listener_leak(self):
         settings = config()
         for _ in range(8):
