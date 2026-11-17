@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.first
 
 object ProxyController {
 
+    /** Same as Flowseal's desktop default (`ProxyConfig.dc_redirects`). */
+    const val AUTO_DC_IPS =
+        "2:${SettingsStore.DEFAULT_DIRECT_DC2_IP},4:${SettingsStore.DEFAULT_DIRECT_DC4_IP}"
+
     suspend fun startFromSavedSettings(
         context: Context,
         showInvalidPortToast: Boolean = false
@@ -34,23 +38,24 @@ object ProxyController {
         val cfWorkerDomain = settingsStore.cfWorkerDomain.first().trim()
         val secretKey = ensureSecretKey(settingsStore)
 
-        val parsedIps = buildList {
-            if (!isDcAuto) {
-                appendDc(1, settingsStore.dc1.first())
-                appendDc(2, settingsStore.dc2.first())
-                appendDc(3, settingsStore.dc3.first())
-                appendDc(4, settingsStore.dc4.first())
+        // "Auto" keeps Flowseal's own default route: direct WebSocket to DC2
+        // and DC4 first, Cloudflare only as fallback. An empty list would make
+        // the shared CF domains the sole route, so their outage drops everything.
+        val parsedIps = if (isDcAuto) AUTO_DC_IPS else buildList {
+            appendDc(1, settingsStore.dc1.first())
+            appendDc(2, settingsStore.dc2.first())
+            appendDc(3, settingsStore.dc3.first())
+            appendDc(4, settingsStore.dc4.first())
 
-                if (isExperimental) {
-                    appendDc(5, settingsStore.dc5.first())
-                    appendDc(203, settingsStore.dc203.first())
-                    appendDc(-1, settingsStore.dc1m.first())
-                    appendDc(-2, settingsStore.dc2m.first())
-                    appendDc(-3, settingsStore.dc3m.first())
-                    appendDc(-4, settingsStore.dc4m.first())
-                    appendDc(-5, settingsStore.dc5m.first())
-                    appendDc(-203, settingsStore.dc203m.first())
-                }
+            if (isExperimental) {
+                appendDc(5, settingsStore.dc5.first())
+                appendDc(203, settingsStore.dc203.first())
+                appendDc(-1, settingsStore.dc1m.first())
+                appendDc(-2, settingsStore.dc2m.first())
+                appendDc(-3, settingsStore.dc3m.first())
+                appendDc(-4, settingsStore.dc4m.first())
+                appendDc(-5, settingsStore.dc5m.first())
+                appendDc(-203, settingsStore.dc203m.first())
             }
         }.joinToString(",")
 
