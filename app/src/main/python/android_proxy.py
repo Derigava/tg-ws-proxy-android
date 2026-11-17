@@ -19,6 +19,7 @@ import time
 from collections import deque
 
 from proxy import __version__ as CORE_VERSION
+from proxy import bridge as core_bridge
 from proxy import config as core_config
 from proxy import raw_websocket
 from proxy import tg_ws_proxy as core
@@ -50,6 +51,50 @@ class _TelegramFrontingSocket(ssl.SSLObject):
 # Only Flowseal's alternate-SNI path uses this context. Ordinary WSS retains
 # the TLS library's standard hostname check.
 raw_websocket._ssl_ctx_fronting.sslobject_class = _TelegramFrontingSocket
+
+
+CF_BACKOFF_INITIAL = 30.0
+CF_BACKOFF_MAX = 300.0
+
+
+class _CfRouteBreaker:
+    """Skip the shared CF WebSocket route for a while after it fails completely.
+
+    Upstream walks every CF domain with a 10-second timeout per domain for every
+    client connection. When the domains are unreachable (blocked or down), each
+    connection hangs for minutes before the direct TCP fallback, and Telegram
+    never connects. After one full miss the route is skipped with exponential
+    backoff; a success or a network change re-enables it at once.
+    """
+
+    def __init__(self, original):
+        self._original = original
+        self.reset()
+
+    def reset(self):
+        self.failures = 0
+        self.retry_after = 0.0
+
+    async def __call__(self, *args, **kwargs):
+        if time.monotonic() < self.retry_after:
+            _logger.debug("CF proxy skipped: all domains failed recently")
+            return False
+        ok = await self._original(*args, **kwargs)
+        if ok:
+            self.reset()
+        elif time.monotonic() >= self.retry_after:
+            # Concurrent connections that started before the first miss finish
+            # their own walk later; count one outage, not one per connection.
+            self.failures += 1
+            delay = min(CF_BACKOFF_INITIAL * 2 ** (self.failures - 1), CF_BACKOFF_MAX)
+            self.retry_after = time.monotonic() + delay
+            _logger.warning("CF proxy: no domain reachable; skipping CF route for %.0fs", delay)
+        return ok
+
+
+_cf_breaker = _CfRouteBreaker(core_bridge._cfproxy_fallback)
+# do_fallback resolves this module global on every call.
+core_bridge._cfproxy_fallback = _cf_breaker
 
 
 def _redact(message):
@@ -279,6 +324,7 @@ class _Runtime:
         target.cfproxy_user_domains = core_config.coerce_domain_list(config["cf_domain"])
         target.cfproxy_worker_domains = core_config.coerce_domain_list(config["cf_worker_domain"])
         _private_domains[:] = target.cfproxy_worker_domains
+        _cf_breaker.reset()
         core_stats.__init__()
 
     async def _watch_listener(self, task):
@@ -315,6 +361,7 @@ class _Runtime:
 
     async def _reset_routes(self):
         core.reset_tcp_backoff()
+        _cf_breaker.reset()
         core.ws_pool.reset()
         core.cf_worker_pool.reset()
         _logger.info("Network changed: route backoff and idle pools reset")

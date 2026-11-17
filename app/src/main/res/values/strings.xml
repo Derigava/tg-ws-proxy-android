@@ -26,7 +26,7 @@
     <string name="language">Language</string>
     <string name="settings">Settings</string>
     <string name="ip_and_port">IP and port</string>
-    <string name="auto_cf_enabled">DC addresses: auto, CF on</string>
+    <string name="auto_cf_enabled">DC addresses: auto (DC2, DC4), CF fallback</string>
     <string name="configure_dc_addresses">Configure DC addresses</string>
     <string name="ws_pool">WS pool</string>
     <string name="secret_key">Secret key</string>
@@ -77,8 +77,8 @@
     <string name="unofficial_notice">// UNOFFICIAL APP, NOT AFFILIATED WITH TELEGRAM</string>
     <string name="update_postponed_24h">Update postponed for 24 hours</string>
     <string name="help_auto_dc_title">Auto and data center addresses</string>
-    <string name="help_auto_dc_text">With Cloudflare on, you usually don\'t need manual DC addresses: the proxy takes the CF route. With Cloudflare off, the connection goes straight to Telegram DCs and you can set addresses by hand. DC2 and DC4 are usually enough; the rest are for manual setup and diagnostics.</string>
-    <string name="help_cloudflare_text">This mode sends the connection through WebSocket domains behind Cloudflare. It is more stable on some mobile networks, but the result depends on the route, DNS and provider. If connecting got slower, compare with CF off.</string>
+    <string name="help_auto_dc_text">With Cloudflare on, DC addresses are set automatically, as on desktop: direct WebSocket to DC2 and DC4 first, then the CF route if that is unavailable. With Cloudflare off, the connection goes only straight to Telegram DCs and you can set addresses by hand. DC2 and DC4 are usually enough; the rest are for manual setup and diagnostics.</string>
+    <string name="help_cloudflare_text">This mode adds a fallback route through WebSocket domains behind Cloudflare, used when the direct DC connection is unavailable. It helps on some mobile networks, but the result depends on the route, DNS and provider. When no CF domain answers, the route is paused for a while. If connecting got slower, compare with CF off.</string>
     <string name="help_ws_pool_text">The number of WebSocket connections prepared in advance. A larger pool can cut the delay on first connect and media loading, but adds background connections. 2–4 is usually enough. Raise it only if you see a benefit on your network.</string>
     <string name="help_secret_key_text">The 16-byte MTProto encryption key. Change it only if the connection link reached someone else.</string>
     <string name="help_experimental_text">Opens manual setup for all regular and media data centers: DC1, DC3, DC5, DC203 and their media variants. It is for diagnostics, tests and unusual routes. Keep it off unless you need that.</string>
