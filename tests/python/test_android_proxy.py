@@ -32,6 +32,38 @@ def config(**changes):
 
 
 class AdapterLifecycleTests(unittest.TestCase):
+    def test_opt_in_cleartext_cf_keeps_default_tls_and_changes_only_cf_transport(self):
+        secure = adapter._validated_config(config(cf_enabled=True))
+        self.assertFalse(secure["disable_secure"])
+        opt_in = adapter._validated_config(config(cf_enabled=True, disable_secure=True))
+        self.assertTrue(opt_in["disable_secure"])
+        runtime = adapter._Runtime()
+        runtime._config = opt_in
+        runtime._apply_config()
+        self.assertTrue(adapter.core_config.proxy_config.disable_secure)
+        self.assertFalse(adapter.core_config.proxy_config.h2_enabled)
+        runtime._config = secure
+        runtime._apply_config()
+        self.assertFalse(adapter.core_config.proxy_config.disable_secure)
+        self.assertTrue(adapter.core_config.proxy_config.h2_enabled)
+        with self.assertRaises(ValueError):
+            adapter._validated_config(config(disable_secure="true"))
+
+    def test_network_reset_schedules_on_device_route_diagnostics(self):
+        async def check():
+            runtime = adapter._Runtime()
+            runtime._config = adapter._validated_config(config(dc_ips="2:149.154.167.220"))
+            events = []
+            async def fake_diagnostics(config_value, domains, logger):
+                events.append((config_value["dc_redirects"], domains))
+            with (patch.object(adapter.core.ws_pool, "warmup", new_callable=unittest.mock.AsyncMock),
+                  patch.object(adapter.core.cf_worker_pool, "warmup", new_callable=unittest.mock.AsyncMock),
+                  patch("route_probe.run_diagnostics", side_effect=fake_diagnostics)):
+                await runtime._reset_routes()
+                await asyncio.sleep(0.01)
+            self.assertEqual(events[0][0], {2: "149.154.167.220"})
+        asyncio.run(check())
+
     def setUp(self):
         adapter.stop()
         self.refresh = patch.object(adapter.core, "start_cfproxy_domain_refresh")
