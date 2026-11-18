@@ -145,6 +145,9 @@
     <string name="cf_proxy_domains_needs_cdn">Чтобы задать свои домены, включи CloudFlare CDN.</string>
     <string name="cf_worker_domains">CF Worker</string>
     <string name="cf_worker_domains_hint">Домены своих воркеров через запятую. Пробуются первыми, до CF-прокси и прямого подключения, и работают даже при выключенном CloudFlare CDN.</string>
+    <string name="cf_disable_tls">CF без TLS (порт 80)</string>
+    <string name="cf_disable_tls_hint">Если соединение с CF зависает на TLS. Использует обычный WebSocket для CF и Worker: трафик без дополнительного TLS виден сети. Прямой WebSocket к Telegram не меняется. Только по необходимости.</string>
+    <string name="report_cf_disable_tls">CF/Worker: TLS выключен (WS:80)</string>
     <string name="invalid_domain">Не домен: %1$s</string>
     <string name="report_cf_worker">CF Worker: включён (%1$d)</string>
     <string name="shortcut_start">Запустить прокси</string>

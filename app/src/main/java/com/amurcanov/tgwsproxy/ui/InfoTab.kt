@@ -59,6 +59,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     val savedPort by settingsStore.port.collectAsStateWithLifecycle(initialValue = "1443")
     val savedPoolSize by settingsStore.poolSize.collectAsStateWithLifecycle(initialValue = 4)
     val savedCfEnabled by settingsStore.cfproxyEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val savedCfDisableTls by settingsStore.cfDisableTls.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomCfDomainEnabled by settingsStore.customCfDomainEnabled.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomCfDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
     val savedCfWorkerDomain by settingsStore.cfWorkerDomain.collectAsStateWithLifecycle(initialValue = "")
@@ -159,6 +160,7 @@ fun InfoTab(settingsStore: SettingsStore) {
                             port = savedPort,
                             poolSize = savedPoolSize,
                             cfEnabled = savedCfEnabled,
+                            cfDisableTls = savedCfDisableTls,
                             customCfDomainEnabled = savedCustomCfDomainEnabled,
                             customCfDomain = savedCustomCfDomain,
                             cfWorkerDomain = savedCfWorkerDomain,
@@ -305,6 +307,7 @@ private fun buildSupportReport(
     port: String,
     poolSize: Int,
     cfEnabled: Boolean,
+    cfDisableTls: Boolean,
     customCfDomainEnabled: Boolean,
     customCfDomain: String,
     cfWorkerDomain: String,
@@ -392,6 +395,7 @@ private fun buildSupportReport(
         appendLine("Fingerprint: $buildFingerprint")
         appendLine(context.getString(R.string.report_settings))
         appendLine(context.getString(R.string.report_mode, mode))
+        if (cfDisableTls) appendLine(context.getString(R.string.report_cf_disable_tls))
         appendLine(context.getString(R.string.report_ws_pool, poolSize))
         append(context.getString(R.string.report_port, port.trim().ifBlank { "1443" }))
         append(cfDomainLine)

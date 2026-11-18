@@ -176,6 +176,9 @@ def _validated_config(value):
     cf_enabled = value.get("cf_enabled", True)
     if not isinstance(cf_enabled, bool):
         raise ValueError("cf_enabled must be a boolean")
+    disable_secure = value.get("disable_secure", False)
+    if not isinstance(disable_secure, bool):
+        raise ValueError("disable_secure must be a boolean")
     dc_value = value.get("dc_ips", "")
     if not isinstance(dc_value, str):
         raise ValueError("dc_ips must be a comma-separated DC:IP string")
@@ -192,6 +195,7 @@ def _validated_config(value):
         "dc_redirects": redirects,
         "pool_size": pool_size,
         "cf_enabled": cf_enabled,
+        "disable_secure": disable_secure,
         "cf_domain": ",".join(domains),
         # Independent of cf_enabled: upstream tries a user's Worker before
         # the shared CF proxy domains and the direct TCP fallback.
@@ -324,6 +328,7 @@ class _Runtime:
         target.dc_redirects = dict(config["dc_redirects"])
         target.pool_size = config["pool_size"]
         target.fallback_cfproxy = config["cf_enabled"]
+        target.disable_secure = config["disable_secure"]
         target.cfproxy_user_domains = core_config.coerce_domain_list(config["cf_domain"])
         target.cfproxy_worker_domains = core_config.coerce_domain_list(config["cf_worker_domain"])
         _private_domains[:] = target.cfproxy_worker_domains
