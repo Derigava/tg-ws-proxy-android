@@ -50,6 +50,7 @@ class ProxyService : Service() {
         const val EXTRA_IPS = "EXTRA_IPS"
         const val EXTRA_POOL_SIZE = "EXTRA_POOL_SIZE"
         const val EXTRA_CFPROXY_ENABLED = "EXTRA_CFPROXY_ENABLED"
+        const val EXTRA_CF_DISABLE_TLS = "EXTRA_CF_DISABLE_TLS"
         const val EXTRA_CFPROXY_PRIORITY = "EXTRA_CFPROXY_PRIORITY"
         const val EXTRA_CFPROXY_DOMAIN = "EXTRA_CFPROXY_DOMAIN"
         const val EXTRA_CF_WORKER_DOMAIN = "EXTRA_CF_WORKER_DOMAIN"
@@ -86,7 +87,8 @@ class ProxyService : Service() {
                 intent.getIntExtra(EXTRA_PORT, 1443), intent.getStringExtra(EXTRA_IPS) ?: "",
                 intent.getStringExtra(EXTRA_SECRET_KEY) ?: "", intent.getIntExtra(EXTRA_POOL_SIZE, 4),
                 intent.getBooleanExtra(EXTRA_CFPROXY_ENABLED, true), intent.getStringExtra(EXTRA_CFPROXY_DOMAIN) ?: "",
-                intent.getStringExtra(EXTRA_CF_WORKER_DOMAIN) ?: ""))
+                intent.getStringExtra(EXTRA_CF_WORKER_DOMAIN) ?: "",
+                intent.getBooleanExtra(EXTRA_CF_DISABLE_TLS, false)))
             ACTION_RESTART -> configuration?.let { restart(it) } ?: stopSelfResult(startId)
             ACTION_STOP -> stop()
             else -> stopSelfResult(startId)
@@ -135,7 +137,7 @@ class ProxyService : Service() {
                         running.value = true
                         ProxyTileService.requestSync(this@ProxyService)
                         update(getString(R.string.notification_running))
-                        journal("info", "started on ${config.host}:${config.port}, pool ${config.poolSize}, cf ${config.cfEnabled}")
+                        journal("info", "started on ${config.host}:${config.port}, pool ${config.poolSize}, cf ${config.cfEnabled}, cf_tls ${!config.disableSecure}")
                         watchNetwork()
                         statistics = scope.launch { pollStatistics() }
                     }

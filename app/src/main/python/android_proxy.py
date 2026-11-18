@@ -23,7 +23,9 @@ from proxy import bridge as core_bridge
 from proxy import config as core_config
 from proxy import raw_websocket
 from proxy import tg_ws_proxy as core
+from proxy.balancer import balancer
 from proxy.stats import stats as core_stats
+import route_probe
 
 START_TIMEOUT = 15.0
 STOP_TIMEOUT = 15.0
@@ -174,6 +176,9 @@ def _validated_config(value):
     cf_enabled = value.get("cf_enabled", True)
     if not isinstance(cf_enabled, bool):
         raise ValueError("cf_enabled must be a boolean")
+    disable_secure = value.get("disable_secure", False)
+    if not isinstance(disable_secure, bool):
+        raise ValueError("disable_secure must be a boolean")
     dc_value = value.get("dc_ips", "")
     if not isinstance(dc_value, str):
         raise ValueError("dc_ips must be a comma-separated DC:IP string")
@@ -190,6 +195,7 @@ def _validated_config(value):
         "dc_redirects": redirects,
         "pool_size": pool_size,
         "cf_enabled": cf_enabled,
+        "disable_secure": disable_secure,
         "cf_domain": ",".join(domains),
         # Independent of cf_enabled: upstream tries a user's Worker before
         # the shared CF proxy domains and the direct TCP fallback.
@@ -221,6 +227,7 @@ class _Runtime:
         self._config = None
         self._stats = {}
         self._refresh_threads = []
+        self._diagnostic_task = None
 
     def _snapshot(self):
         with self._lock:
@@ -321,6 +328,7 @@ class _Runtime:
         target.dc_redirects = dict(config["dc_redirects"])
         target.pool_size = config["pool_size"]
         target.fallback_cfproxy = config["cf_enabled"]
+        target.disable_secure = config["disable_secure"]
         target.cfproxy_user_domains = core_config.coerce_domain_list(config["cf_domain"])
         target.cfproxy_worker_domains = core_config.coerce_domain_list(config["cf_worker_domain"])
         _private_domains[:] = target.cfproxy_worker_domains
@@ -359,6 +367,18 @@ class _Runtime:
             _logger.warning("Network change handling failed: %r", exc)
             return False
 
+    def _schedule_diagnostics(self, delay=0):
+        """One small sample on the current network, independent of live sessions."""
+        if self._diagnostic_task and not self._diagnostic_task.done():
+            self._diagnostic_task.cancel()
+
+        async def diagnostic_run():
+            if delay:
+                await asyncio.sleep(delay)  # Let the CF domain refresh finish.
+            await route_probe.run_diagnostics(self._config, list(balancer.domains), _logger)
+
+        self._diagnostic_task = asyncio.create_task(diagnostic_run(), name="route-diagnostics")
+
     async def _reset_routes(self):
         core.reset_tcp_backoff()
         _cf_breaker.reset()
@@ -367,6 +387,7 @@ class _Runtime:
         _logger.info("Network changed: route backoff and idle pools reset")
         await core.ws_pool.warmup()
         await core.cf_worker_pool.warmup()
+        self._schedule_diagnostics()
 
     async def _session(self):
         with self._lock:
@@ -376,6 +397,7 @@ class _Runtime:
                 self._stop_event.set()
         task = asyncio.create_task(core._run(self._stop_event), name="flowseal-core")
         watcher = asyncio.create_task(self._watch_listener(task), name="flowseal-status")
+        self._schedule_diagnostics(delay=2)
         stop_waiter = asyncio.create_task(self._stop_event.wait(), name="flowseal-stop")
         try:
             done, _ = await asyncio.wait((task, stop_waiter), return_when=asyncio.FIRST_COMPLETED)

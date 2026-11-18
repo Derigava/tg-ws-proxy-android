@@ -145,6 +145,9 @@
     <string name="cf_proxy_domains_needs_cdn">Turn on CloudFlare CDN to use your own domains.</string>
     <string name="cf_worker_domains">CF Worker</string>
     <string name="cf_worker_domains_hint">Your Worker domains, comma-separated. They are tried first, before the CF proxy and direct connection, and work even with CloudFlare CDN off.</string>
+    <string name="cf_disable_tls">CF without TLS (port 80)</string>
+    <string name="cf_disable_tls_hint">If CF stalls at TLS. Uses plain WebSocket for CF and Worker: traffic has no additional TLS protection from the network. Direct Telegram WebSocket is unchanged. Enable only if needed.</string>
+    <string name="report_cf_disable_tls">CF/Worker: TLS off (WS:80)</string>
     <string name="invalid_domain">Not a domain: %1$s</string>
     <string name="report_cf_worker">CF Worker: on (%1$d)</string>
     <string name="shortcut_start">Start proxy</string>
