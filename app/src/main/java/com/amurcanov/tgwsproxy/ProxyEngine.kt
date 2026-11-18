@@ -9,12 +9,12 @@ data class ActiveProxyConnection(val host: String, val port: Int, val secret: St
 data class ProxyConfiguration(
     val host: String, val port: Int, val dcIps: String, val secret: String,
     val poolSize: Int = 4, val cfEnabled: Boolean = true, val cfDomain: String = "",
-    val cfWorkerDomain: String = ""
+    val cfWorkerDomain: String = "", val disableSecure: Boolean = false
 ) {
     fun toJson(): String = JSONObject().put("host", host).put("port", port)
         .put("dc_ips", dcIps).put("secret", secret).put("pool_size", poolSize)
         .put("cf_enabled", cfEnabled).put("cf_domain", cfDomain)
-        .put("cf_worker_domain", cfWorkerDomain).toString()
+        .put("cf_worker_domain", cfWorkerDomain).put("disable_secure", disableSecure).toString()
 }
 data class EngineSnapshot(
     val state: String, val connection: ActiveProxyConnection?, val bytesUp: Long,

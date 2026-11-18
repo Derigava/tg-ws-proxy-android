@@ -79,6 +79,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     val savedBindIp by settingsStore.bindIp.collectAsStateWithLifecycle(initialValue = "127.0.0.1")
     val savedPoolSize by settingsStore.poolSize.collectAsStateWithLifecycle(initialValue = 4)
     val savedCfEnabled by settingsStore.cfproxyEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val savedCfDisableTls by settingsStore.cfDisableTls.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomDomainEnabled by settingsStore.customCfDomainEnabled.collectAsStateWithLifecycle(initialValue = false)
     val savedCustomDomain by settingsStore.customCfDomain.collectAsStateWithLifecycle(initialValue = "")
     val savedWorkerDomain by settingsStore.cfWorkerDomain.collectAsStateWithLifecycle(initialValue = "")
@@ -116,6 +117,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
     var bindIpText by rememberSaveable(savedBindIp) { mutableStateOf(savedBindIp) }
     var selectedPoolSize by rememberSaveable(savedPoolSize) { mutableIntStateOf(savedPoolSize) }
     var cfEnabled by rememberSaveable(savedCfEnabled) { mutableStateOf(savedCfEnabled) }
+    var cfDisableTls by rememberSaveable(savedCfDisableTls) { mutableStateOf(savedCfDisableTls) }
     var customCfDomainEnabled by rememberSaveable(savedCustomDomainEnabled) { mutableStateOf(savedCustomDomainEnabled) }
     var customCfDomain by rememberSaveable(savedCustomDomain) { mutableStateOf(savedCustomDomain) }
     var cfWorkerDomain by rememberSaveable(savedWorkerDomain) { mutableStateOf(savedWorkerDomain) }
@@ -141,7 +143,7 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 isDcAuto, dc1Text, dc2Text, dc3Text, dc4Text, dc5Text, dc203Text,
                 dc1mText, dc2mText, dc3mText, dc4mText, dc5mText, dc203mText,
                 experimentalMode, bindIpText, portText, selectedPoolSize,
-                cfEnabled, customCfDomainEnabled, customCfDomain, cfWorkerDomain, secretKeyText
+                cfEnabled, cfDisableTls, customCfDomainEnabled, customCfDomain, cfWorkerDomain, secretKeyText
             )
         }
     }
@@ -263,6 +265,18 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 isDcAuto = it
                 scheduleSave()
             }
+        )
+        SwitchRow(
+            title = stringResource(R.string.cf_disable_tls),
+            checked = cfDisableTls,
+            enabled = !isRunning && (cfEnabled || cfWorkerDomain.isNotBlank()),
+            onCheckedChange = { cfDisableTls = it; scheduleSave() }
+        )
+        Text(
+            text = stringResource(R.string.cf_disable_tls_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = Brand.muted,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
         )
 
         SectionLabel(stringResource(R.string.own_cloudflare))

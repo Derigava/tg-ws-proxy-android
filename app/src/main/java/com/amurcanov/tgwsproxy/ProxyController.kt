@@ -33,6 +33,7 @@ object ProxyController {
         val isDcAuto = settingsStore.isDcAuto.first()
         val poolSize = settingsStore.poolSize.first()
         val cfEnabled = settingsStore.cfproxyEnabled.first()
+        val cfDisableTls = settingsStore.cfDisableTls.first()
         val customCfDomainEnabled = settingsStore.customCfDomainEnabled.first()
         val customCfDomain = settingsStore.customCfDomain.first().trim()
         val cfWorkerDomain = settingsStore.cfWorkerDomain.first().trim()
@@ -68,6 +69,7 @@ object ProxyController {
                 putExtra(ProxyService.EXTRA_IPS, parsedIps)
                 putExtra(ProxyService.EXTRA_POOL_SIZE, poolSize)
                 putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, cfEnabled)
+                putExtra(ProxyService.EXTRA_CF_DISABLE_TLS, cfDisableTls)
                 putExtra(ProxyService.EXTRA_CFPROXY_PRIORITY, true)
                 putExtra(
                     ProxyService.EXTRA_CFPROXY_DOMAIN,
