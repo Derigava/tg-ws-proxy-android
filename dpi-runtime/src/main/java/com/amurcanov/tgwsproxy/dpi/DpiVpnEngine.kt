@@ -73,6 +73,7 @@ class DpiVpnEngine(
                 .putExtra(DpiVpnService.EXTRA_HOST, config.normalizedHost)
                 .putExtra(DpiVpnService.EXTRA_PORT, config.port)
                 .putExtra(DpiVpnService.EXTRA_REPLACEMENT_SLOT, proof?.confirmedSlot?.name)
+                .putExtra(DpiVpnService.EXTRA_REPLACEMENT_NETWORKS, proof?.confirmedNetworks?.toLongArray())
                 .putExtra(DpiVpnService.EXTRA_DNS, routing.dns)
                 .putExtra(DpiVpnService.EXTRA_IPV6, routing.ipv6)
                 .putExtra(DpiVpnService.EXTRA_APP_LIST_MODE, routing.appListMode.name)
@@ -109,6 +110,7 @@ class DpiVpnEngine(
             VpnRefuseReason.CONSENT_LOST -> "VPN consent was lost"
             VpnRefuseReason.LOCKDOWN -> "always-on VPN or lockdown is active"
             VpnRefuseReason.SLOT_CHANGED -> "VPN slot changed during startup"
+            VpnRefuseReason.OBSERVATION_UNAVAILABLE -> "VPN slot could not be observed"
         }
         VpnStartDecision.Start -> "unreachable"
     }

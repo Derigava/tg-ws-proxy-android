@@ -6,35 +6,35 @@ import org.junit.Test
 
 /**
  * Decision-table test for [VpnStartPolicy]. The table pins the conservative
- * contract: a cached OS prepare grant ([VpnStartRequest.prepared]) authorizes
- * starting on a free/ours slot but NEVER authorizes replacing a foreign VPN —
- * that requires a deliberate per-attempt [VpnReplacement] bound to the slot,
- * AND a valid OS grant. An unknown owner is a warning unless deliberately and
- * scoped-ly replaced, and lockdown always refuses.
+ * contract: a cached OS prepare grant authorizes a free/ours start but NEVER
+ * authorizes replacing a foreign VPN — that requires a deliberate per-attempt
+ * [VpnReplacement] bound to the exact observed network handles AND a valid OS
+ * grant. Unavailable observation never authorizes anything; a proof bound to a
+ * different slot or different handles is ignored (the freshly observed slot wins).
  */
 class VpnStartPolicyTest {
 
+    private fun req(slot: VpnSlotState, prepared: Boolean, networks: Set<Long> = emptySet(), lockdown: Boolean = false) =
+        VpnStartRequest(slot, prepared = prepared, lockdown = lockdown, vpnNetworks = networks)
+
     @Test
     fun freeSlotPreparedStarts() {
-        assertEquals(
-            VpnStartDecision.Start,
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.FREE, prepared = true)),
-        )
+        assertEquals(VpnStartDecision.Start, VpnStartPolicy.decide(req(VpnSlotState.FREE, true)))
     }
 
     @Test
     fun freeSlotNotPreparedRefuses() {
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.FREE, prepared = false)),
+            VpnStartPolicy.decide(req(VpnSlotState.FREE, false)),
         )
     }
 
     @Test
-    fun ownSlotPreparedStarts() {
+    fun unavailableObservationRefuses() {
         assertEquals(
-            VpnStartDecision.Start,
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.OURS, prepared = true)),
+            VpnStartDecision.Refuse(VpnRefuseReason.OBSERVATION_UNAVAILABLE),
+            VpnStartPolicy.decide(req(VpnSlotState.UNAVAILABLE, true)),
         )
     }
 
@@ -42,117 +42,123 @@ class VpnStartPolicyTest {
     fun thirdPartyWithoutReplacementOffers() {
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = false),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.THIRD_PARTY, prepared = true)),
+            VpnStartPolicy.decide(req(VpnSlotState.THIRD_PARTY, true, setOf(1L))),
         )
     }
 
     @Test
-    fun thirdPartyWithReplacementAndPrepareStarts() {
+    fun thirdPartyWithMatchingReplacementStarts() {
         assertEquals(
             VpnStartDecision.Start,
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.THIRD_PARTY, prepared = true),
-                VpnReplacement(VpnSlotState.THIRD_PARTY),
+                req(VpnSlotState.THIRD_PARTY, true, setOf(1L)),
+                VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L)),
             ),
         )
     }
 
     @Test
     fun thirdPartyCachedPrepareGrantCannotReplace() {
-        // A cached OS grant (prepared=true) without a deliberate replacement is
-        // still an Offer, never a silent takeover.
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = false),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.THIRD_PARTY, prepared = true)),
+            VpnStartPolicy.decide(req(VpnSlotState.THIRD_PARTY, true, setOf(1L))),
         )
     }
 
     @Test
-    fun thirdPartyWithReplacementButNoPrepareOffers() {
-        // Deliberate replacement still requires a valid OS grant to establish.
+    fun thirdPartyReplacementWithDifferentHandlesIsIgnored() {
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = false),
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.THIRD_PARTY, prepared = false),
-                VpnReplacement(VpnSlotState.THIRD_PARTY),
+                req(VpnSlotState.THIRD_PARTY, true, setOf(2L)),
+                VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L)),
             ),
         )
     }
 
     @Test
-    fun unknownSlotWithoutReplacementWarnsConservatively() {
+    fun unknownWithoutReplacementWarnsConservatively() {
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = true),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true)),
+            VpnStartPolicy.decide(req(VpnSlotState.UNKNOWN, true, setOf(1L))),
         )
     }
 
     @Test
-    fun unknownSlotCachedGrantWithoutReplacementOffers() {
-        // Cached grant alone is never authorization to replace an unknown VPN.
+    fun unknownCachedGrantWithoutReplacementOffers() {
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = true),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true)),
+            VpnStartPolicy.decide(req(VpnSlotState.UNKNOWN, true, setOf(1L))),
         )
     }
 
     @Test
-    fun unknownSlotWithDeliberateReplacementAndPrepareStarts() {
-        // The reachable replace path for UNKNOWN: deliberate proof + valid OS grant.
+    fun unknownWithMatchingReplacementStarts() {
         assertEquals(
             VpnStartDecision.Start,
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true),
-                VpnReplacement(VpnSlotState.UNKNOWN),
+                req(VpnSlotState.UNKNOWN, true, setOf(1L)),
+                VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L)),
             ),
         )
     }
 
     @Test
-    fun unknownSlotWithReplacementButNoPrepareOffers() {
+    fun unknownReplacementWithDifferentHandlesIsIgnored() {
+        // Same slot state (both UNKNOWN) but a different VPN: the proof is
+        // bound to handles {1}, the fresh observation is {2} -> rejected.
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = true),
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.UNKNOWN, prepared = false),
-                VpnReplacement(VpnSlotState.UNKNOWN),
+                req(VpnSlotState.UNKNOWN, true, setOf(2L)),
+                VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L)),
+            ),
+        )
+    }
+
+    @Test
+    fun unknownReplacementWithEmptyNetworksIsIgnored() {
+        // Empty/identity-less observation must never authorize replacement.
+        assertEquals(
+            VpnStartDecision.Offer(ownerUncertain = true),
+            VpnStartPolicy.decide(
+                req(VpnSlotState.UNKNOWN, true, emptySet()),
+                VpnReplacement(VpnSlotState.UNKNOWN, emptySet()),
             ),
         )
     }
 
     @Test
     fun replacementBoundToWrongSlotIsIgnored() {
-        // A proof bound to a different observation cannot authorize a changed slot.
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = true),
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true),
-                VpnReplacement(VpnSlotState.THIRD_PARTY),
+                req(VpnSlotState.UNKNOWN, true, setOf(1L)),
+                VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L)),
             ),
         )
     }
 
     @Test
-    fun lockdownRefusesRegardlessOfSlotOrReplacement() {
+    fun lockdownRefusesRegardless() {
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN),
-            VpnStartPolicy.decide(VpnStartRequest(VpnSlotState.FREE, prepared = true, lockdown = true)),
+            VpnStartPolicy.decide(req(VpnSlotState.FREE, true, lockdown = true)),
         )
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN),
             VpnStartPolicy.decide(
-                VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true, lockdown = true),
-                VpnReplacement(VpnSlotState.UNKNOWN),
+                req(VpnSlotState.UNKNOWN, true, setOf(1L), lockdown = true),
+                VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L)),
             ),
         )
     }
 
     @Test
     fun decisionIsPureAndRecheckable() {
-        val request = VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true)
-        assertEquals(
-            VpnStartPolicy.decide(request, VpnReplacement(VpnSlotState.UNKNOWN)),
-            VpnStartPolicy.decide(request, VpnReplacement(VpnSlotState.UNKNOWN)),
-        )
+        val request = req(VpnSlotState.UNKNOWN, true, setOf(1L))
+        val proof = VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L))
+        assertEquals(VpnStartPolicy.decide(request, proof), VpnStartPolicy.decide(request, proof))
         assertTrue(VpnStartPolicy.decide(request) is VpnStartDecision.Offer)
     }
 }

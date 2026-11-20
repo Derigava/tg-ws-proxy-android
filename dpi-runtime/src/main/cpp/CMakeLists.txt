@@ -89,7 +89,7 @@ target_compile_definitions(hev-task-system PRIVATE
 
 # libhev-socks5-tunnel.so (shared)
 file(GLOB_RECURSE TUNNEL_SRC "${HEV_TUNNEL}/src/*.c" "${HEV_TUNNEL}/src/*.S")
-add_library(hev-socks5-tunnel SHARED ${TUNNEL_SRC})
+add_library(hev-socks5-tunnel SHARED ${TUNNEL_SRC} "${CMAKE_CURRENT_SOURCE_DIR}/hev-ready-jni.c")
 target_include_directories(hev-socks5-tunnel PRIVATE
     "${HEV_TUNNEL}/src"
     "${HEV_TUNNEL}/src/misc"
@@ -106,4 +106,7 @@ target_compile_definitions(hev-socks5-tunnel PRIVATE
     SOCKLEN_T_DEFINED
     PKGNAME=io/github/romanvht/byedpi/core)
 target_link_libraries(hev-socks5-tunnel PRIVATE yaml lwip hev-task-system android log)
-target_link_options(hev-socks5-tunnel PRIVATE "-Wl,-z,common-page-size=16384")
+# --wrap=hev_socks5_tunnel_run exposes the genuine native-ready signal (see
+# hev-ready-jni.c): the pinned tunnel calls that symbol exactly once, only after
+# a successful init, so reaching it is positive native readiness.
+target_link_options(hev-socks5-tunnel PRIVATE "-Wl,-z,common-page-size=16384" "-Wl,--wrap=hev_socks5_tunnel_run")
