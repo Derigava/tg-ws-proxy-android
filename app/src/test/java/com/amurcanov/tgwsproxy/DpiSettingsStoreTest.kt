@@ -188,4 +188,15 @@ class DpiSettingsStoreTest {
         assertEquals("-d3 -a2", store.currentSettings()["byedpi_cmd_args"])
         assertEquals(listOf("-d3 -a2"), store.history().map { it.text }.take(1))
     }
+
+    @Test fun resetSettingsClearsToDefaultDocument() {
+        store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_desync_method\":\"split\""))
+        store.addCommand("-o1")
+        store.resetSettings()
+        val document = JSONObject(store.exportJson())
+        assertEquals("io.github.romanvht.byedpi", document.getString("app"))
+        assertFalse(document.has("history"))
+        assertFalse(document.has("apps"))
+        assertEquals(listOf("-o1", "-a1", "-r-5+se"), store.connectionOptions().args)
+    }
 }

@@ -190,6 +190,8 @@
     <string name="dpi_backup_imported">Backup saved. The SOCKS5 endpoint and VPN app filter settings take effect at the next start.</string>
     <string name="dpi_backup_exported">Backup exported</string>
     <string name="dpi_backup_error">Could not read or write the ByeByeDPI backup</string>
+    <string name="dpi_backup_reset">Reset ByeByeDPI settings</string>
+    <string name="dpi_backup_reset_done">ByeByeDPI settings reset</string>
     <string name="dpi_strategy_desync">Desync method</string>
     <string name="dpi_strategy_split">Split</string>
     <string name="dpi_strategy_split_position">Split position</string>

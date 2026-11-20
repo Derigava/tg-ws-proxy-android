@@ -189,6 +189,8 @@
     <string name="dpi_backup_imported">Копия сохранена. Адрес SOCKS5 и фильтр приложений VPN применятся при следующем запуске.</string>
     <string name="dpi_backup_exported">Копия экспортирована</string>
     <string name="dpi_backup_error">Не удалось прочитать или записать копию ByeByeDPI</string>
+    <string name="dpi_backup_reset">Сбросить настройки ByeByeDPI</string>
+    <string name="dpi_backup_reset_done">Настройки ByeByeDPI сброшены</string>
     <string name="dpi_strategy_desync">Метод десинхронизации</string>
     <string name="dpi_strategy_split">Разделение</string>
     <string name="dpi_strategy_split_position">Позиция разделения</string>
