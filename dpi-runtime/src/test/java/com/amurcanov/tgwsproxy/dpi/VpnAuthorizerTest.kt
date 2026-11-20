@@ -6,8 +6,8 @@ import org.junit.Test
 
 /**
  * Integration-seam tests for [VpnAuthorizer]. A scripted [VpnSlotSampler]
- * supplies the slot snapshots so the decide-then-recheck sequence, the
- * deliberate-replacement path, and the conservative refusals are exercised
+ * supplies the snapshots so the decide-then-recheck sequence, the
+ * handle-scoped replacement path, and the conservative refusals are exercised
  * without Android. The production [AndroidVpnSlotSampler] is the real
  * (device-only, fail-closed) seam.
  */
@@ -21,10 +21,14 @@ class VpnAuthorizerTest {
 
     private fun authorizer(vararg samples: VpnStartRequest) = VpnAuthorizer(ScriptedSampler(samples.toList()))
 
-    private fun freePrepared() = VpnStartRequest(VpnSlotState.FREE, prepared = true)
-    private fun freeUnprepared() = VpnStartRequest(VpnSlotState.FREE, prepared = false)
-    private fun unknownPrepared() = VpnStartRequest(VpnSlotState.UNKNOWN, prepared = true)
-    private fun thirdPartyPrepared() = VpnStartRequest(VpnSlotState.THIRD_PARTY, prepared = true)
+    private fun req(slot: VpnSlotState, prepared: Boolean, networks: Set<Long> = emptySet(), lockdown: Boolean = false) =
+        VpnStartRequest(slot, prepared = prepared, lockdown = lockdown, vpnNetworks = networks)
+
+    private fun freePrepared() = req(VpnSlotState.FREE, true)
+    private fun freeUnprepared() = req(VpnSlotState.FREE, false)
+    private fun unavailable() = req(VpnSlotState.UNAVAILABLE, true)
+    private fun unknown(handles: Set<Long>) = req(VpnSlotState.UNKNOWN, true, handles)
+    private fun thirdParty(handles: Set<Long>) = req(VpnSlotState.THIRD_PARTY, true, handles)
 
     @Test
     fun startSurvivesRecheckWhenSlotStable() {
@@ -35,17 +39,23 @@ class VpnAuthorizerTest {
     fun changedSlotDuringRecheckRefusesConservatively() {
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
-            authorizer(freePrepared(), unknownPrepared()).authorize(null),
+            authorizer(freePrepared(), unknown(setOf(1L))).authorize(null),
         )
     }
 
     @Test
     fun unavailableObservationFailsClosed() {
-        // UNKNOWN is also the fail-closed slot when observation is unavailable:
-        // it must never auto-start, only offer.
         assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = true),
-            authorizer(unknownPrepared()).authorize(null),
+            VpnStartDecision.Refuse(VpnRefuseReason.OBSERVATION_UNAVAILABLE),
+            authorizer(unavailable()).authorize(null),
+        )
+    }
+
+    @Test
+    fun unavailableDuringRecheckRefuses() {
+        assertEquals(
+            VpnStartDecision.Refuse(VpnRefuseReason.OBSERVATION_UNAVAILABLE),
+            authorizer(freePrepared(), unavailable()).authorize(null),
         )
     }
 
@@ -53,50 +63,52 @@ class VpnAuthorizerTest {
     fun thirdPartyWithoutReplacementOffers() {
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = false),
-            authorizer(thirdPartyPrepared()).authorize(null),
+            authorizer(thirdParty(setOf(1L))).authorize(null),
         )
     }
 
     @Test
     fun cachedPrepareGrantCannotReplaceThirdParty() {
-        // prepared=true is a cached OS grant, not a deliberate replacement.
         assertEquals(
             VpnStartDecision.Offer(ownerUncertain = false),
-            authorizer(thirdPartyPrepared()).authorize(null),
+            authorizer(thirdParty(setOf(1L))).authorize(null),
         )
     }
 
     @Test
-    fun thirdPartyWithDeliberateReplacementStarts() {
+    fun thirdPartyWithMatchingReplacementStarts() {
+        val proof = VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L))
         assertEquals(
             VpnStartDecision.Start,
-            authorizer(thirdPartyPrepared(), thirdPartyPrepared()).authorize(VpnReplacement(VpnSlotState.THIRD_PARTY)),
+            authorizer(thirdParty(setOf(1L)), thirdParty(setOf(1L))).authorize(proof),
         )
     }
 
     @Test
-    fun unknownCachedGrantCannotReplace() {
-        assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = true),
-            authorizer(unknownPrepared()).authorize(null),
-        )
-    }
-
-    @Test
-    fun unknownDeliberateReplacementWithPrepareStarts() {
-        assertEquals(
-            VpnStartDecision.Start,
-            authorizer(unknownPrepared(), unknownPrepared()).authorize(VpnReplacement(VpnSlotState.UNKNOWN)),
-        )
-    }
-
-    @Test
-    fun replacementRejectedWhenSlotChangesDuringRecheck() {
-        // The proof was bound to THIRD_PARTY, but the slot changed to UNKNOWN:
-        // the freshly observed slot wins, so the replacement is rejected.
+    fun sameStateDifferentHandlesRejectedOnRecheck() {
+        // A -> B, both THIRD_PARTY state but different VPN handles: rejected.
+        val proof = VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L))
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
-            authorizer(thirdPartyPrepared(), unknownPrepared()).authorize(VpnReplacement(VpnSlotState.THIRD_PARTY)),
+            authorizer(thirdParty(setOf(1L)), thirdParty(setOf(2L))).authorize(proof),
+        )
+    }
+
+    @Test
+    fun unknownWithMatchingReplacementStarts() {
+        val proof = VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L))
+        assertEquals(
+            VpnStartDecision.Start,
+            authorizer(unknown(setOf(1L)), unknown(setOf(1L))).authorize(proof),
+        )
+    }
+
+    @Test
+    fun unknownSameStateDifferentHandlesRejectedOnRecheck() {
+        val proof = VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L))
+        assertEquals(
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
+            authorizer(unknown(setOf(1L)), unknown(setOf(2L))).authorize(proof),
         )
     }
 
@@ -110,7 +122,7 @@ class VpnAuthorizerTest {
 
     @Test
     fun lockdownRefuses() {
-        val locked = VpnStartRequest(VpnSlotState.FREE, prepared = true, lockdown = true)
+        val locked = req(VpnSlotState.FREE, true, lockdown = true)
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN),
             authorizer(locked).authorize(null),
@@ -126,13 +138,25 @@ class VpnAuthorizerTest {
     }
 
     @Test
-    fun confirmReplacementBindsToObservedSlot() {
-        val authorizer = authorizer(unknownPrepared())
-        assertEquals(VpnReplacement(VpnSlotState.UNKNOWN), authorizer.confirmReplacement())
+    fun confirmReplacementBindsToObservedSlotAndHandles() {
+        assertEquals(
+            VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L, 2L)),
+            authorizer(unknown(setOf(1L, 2L))).confirmReplacement(),
+        )
     }
 
     @Test
     fun confirmReplacementRefusesWhenNothingToReplace() {
         assertThrows(IllegalArgumentException::class.java) { authorizer(freePrepared()).confirmReplacement() }
+    }
+
+    @Test
+    fun confirmReplacementRefusesWhenUnavailable() {
+        assertThrows(IllegalArgumentException::class.java) { authorizer(unavailable()).confirmReplacement() }
+    }
+
+    @Test
+    fun confirmReplacementRefusesWhenIdentityLess() {
+        assertThrows(IllegalArgumentException::class.java) { authorizer(req(VpnSlotState.UNKNOWN, true, emptySet())).confirmReplacement() }
     }
 }

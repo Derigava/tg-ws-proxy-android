@@ -56,6 +56,7 @@ class DpiVpnService : VpnService() {
         const val EXTRA_APP_LIST_MODE = "EXTRA_APP_LIST_MODE"
         const val EXTRA_APPS = "EXTRA_APPS"
         const val EXTRA_REPLACEMENT_SLOT = "EXTRA_REPLACEMENT_SLOT"
+        const val EXTRA_REPLACEMENT_NETWORKS = "EXTRA_REPLACEMENT_NETWORKS"
         const val EXTRA_RESULT_RECEIVER = "EXTRA_RESULT_RECEIVER"
         const val EXTRA_BINDER = "EXTRA_BINDER"
         const val EXTRA_ERROR = "EXTRA_ERROR"
@@ -66,7 +67,6 @@ class DpiVpnService : VpnService() {
 
         private const val PROBE_TIMEOUT_MS = 250
         private const val POLL_MS = 50L
-        private const val TUNNEL_READY_GRACE_MS = 200L
         private const val CHANNEL = "ByeDPI_Vpn_Service"
         private const val NOTIFICATION_ID = 103
         private const val TAG = "DpiVpnService"
@@ -132,7 +132,12 @@ class DpiVpnService : VpnService() {
         )
         val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
         val replacement = intent.getStringExtra(EXTRA_REPLACEMENT_SLOT)?.let { slotName ->
-            runCatching { VpnReplacement(confirmedSlot = VpnSlotState.valueOf(slotName)) }.getOrNull()
+            runCatching {
+                VpnReplacement(
+                    confirmedSlot = VpnSlotState.valueOf(slotName),
+                    confirmedNetworks = intent.getLongArrayExtra(EXTRA_REPLACEMENT_NETWORKS)?.toSet() ?: emptySet(),
+                )
+            }.getOrNull()
         }
         if (args.isNullOrEmpty() || host.isBlank() || port !in 1..65535) {
             report(receiver, "invalid VPN engine configuration")
@@ -226,16 +231,24 @@ class DpiVpnService : VpnService() {
                     terminate()
                 }
             }
-            // Give the tunnel a short grace to fail fast before claiming
-            // readiness: a surviving thread means the native event loop is
-            // running (genuine native readiness, as far as the HEV API exposes).
-            Thread.sleep(TUNNEL_READY_GRACE_MS)
-            if (tunnelThread?.isAlive == true) {
-                receiver?.send(RESULT_STARTED, Bundle())
-            } else {
-                report(receiver, "HEV tunnel failed to start")
-                terminate()
+            // Wait for the genuine native-ready signal (hev_socks5_tunnel_run
+            // reached, i.e. the event loop is about to run) — not thread
+            // liveness. Thread death before ready is an early failure.
+            val deadline = System.currentTimeMillis() + START_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadline && !stopping) {
+                if (HevNative.isReady() != 0) {
+                    receiver?.send(RESULT_STARTED, Bundle())
+                    return
+                }
+                if (tunnelThread?.isAlive != true) {
+                    report(receiver, "HEV tunnel exited before ready")
+                    terminate()
+                    return
+                }
+                Thread.sleep(POLL_MS)
             }
+            report(receiver, "HEV tunnel not ready")
+            terminate()
         } catch (e: Throwable) {
             Log.e(TAG, "VPN tunnel failed", e)
             report(receiver, "VPN tunnel failed: ${e.message ?: e.javaClass.simpleName}")
