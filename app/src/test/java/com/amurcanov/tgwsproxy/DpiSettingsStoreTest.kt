@@ -28,6 +28,25 @@ class DpiSettingsStoreTest {
         assertFalse(output.toString().contains("not-for-export"))
     }
 
+    @Test fun importsEndpointAndPerAppRoutingWithoutActivatingVpn() {
+        store.importJson(fixture.replace("\"1080\"", "\"23456\"").replace("\"ipv6_enable\":true", "\"ipv6_enable\":false,\"applist_type\":\"whitelist\""))
+        val options = store.connectionOptions()
+        assertEquals(23456, options.port)
+        assertEquals("127.0.0.1", options.host)
+        assertFalse(options.routing.ipv6)
+        assertEquals(com.amurcanov.tgwsproxy.dpi.VpnAppListMode.WHITELIST, options.routing.appListMode)
+        assertEquals(listOf("org.example.client"), options.routing.apps)
+    }
+
+    @Test fun invalidImportedEndpointDoesNotOverwriteBackup() {
+        store.importJson(fixture)
+        val before = store.exportJson()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importJson(fixture.replace("\"1080\"", "\"99999\""))
+        }
+        assertEquals(before, store.exportJson())
+    }
+
     @Test fun emptyStoreCanExportAnImportableBackup() {
         context.getSharedPreferences("dpi_document", Context.MODE_PRIVATE).edit().clear().commit()
         val initial = store.exportJson()

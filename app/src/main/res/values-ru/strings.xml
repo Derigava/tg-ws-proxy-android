@@ -186,7 +186,7 @@
     <string name="dpi_log_failed">Ошибка движка</string>
     <string name="dpi_backup_import">Импорт копии ByeByeDPI</string>
     <string name="dpi_backup_export">Экспорт копии ByeByeDPI</string>
-    <string name="dpi_backup_imported">Копия сохранена. Активные настройки не изменены.</string>
+    <string name="dpi_backup_imported">Копия сохранена. Адрес SOCKS5 и фильтр приложений VPN применятся при следующем запуске.</string>
     <string name="dpi_backup_exported">Копия экспортирована</string>
     <string name="dpi_backup_error">Не удалось прочитать или записать копию ByeByeDPI</string>
 </resources>

@@ -52,6 +52,7 @@ class DpiVpnEngine(
 
         val myGeneration = ++generation
         val argv = config.toArgv()
+        val routing = config.vpnRouting ?: this.routing
         val session = StartSession(myGeneration)
         val receiver = object : ResultReceiver(mainHandler) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {

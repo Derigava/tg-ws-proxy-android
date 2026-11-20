@@ -5,6 +5,8 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
+internal data class DpiConnectionOptions(val host: String, val port: Int, val routing: DpiVpnRouting)
+
 /** Stores a validated v.1.8.2 exchange document, independently of TG settings. */
 internal class DpiSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences("dpi_document", Context.MODE_PRIVATE)
@@ -47,7 +49,41 @@ internal class DpiSettingsStore(context: Context) {
         } catch (exception: JSONException) {
             throw IllegalArgumentException("Invalid ByeByeDPI document", exception)
         }
+        connectionOptions(validated)
         check(preferences.edit().putString("backup", validated.toString()).commit()) { "Could not save ByeByeDPI document" }
+    }
+
+    fun connectionOptions(): DpiConnectionOptions = connectionOptions(JSONObject(exportJson()))
+
+    private fun connectionOptions(snapshot: JSONObject): DpiConnectionOptions {
+        val settings = snapshot.optJSONObject("settings") ?: JSONObject()
+        fun text(key: String, default: String): String = settings.section(key)?.let {
+            require(it is String) { "Expected text in $key" }
+            it
+        } ?: default
+        val rawPort = settings.section("byedpi_proxy_port") ?: "1080"
+        val port = rawPort.toString().toIntOrNull()?.takeIf { it in 1..65535 }
+            ?: throw IllegalArgumentException("Invalid SOCKS5 port")
+        val host = text("byedpi_proxy_ip", "127.0.0.1").removeSurrounding("[", "]")
+        val loopback = when (host) {
+            "127.0.0.1", "0.0.0.0" -> "127.0.0.1"
+            "::1", "::" -> "::1"
+            else -> throw IllegalArgumentException("SOCKS5 endpoint must be local")
+        }
+        val ipv6 = settings.section("ipv6_enable")?.let {
+            require(it is Boolean) { "Invalid IPv6 setting" }
+            it
+        } ?: false
+        val apps = snapshot.optJSONArray("apps")?.let { records ->
+            (0 until records.length()).map { records.getString(it) }.distinct()
+        }.orEmpty()
+        val appList = when (text("applist_type", "disable")) {
+            "disable" -> VpnAppListMode.ALL_APPS
+            "blacklist" -> VpnAppListMode.BLACKLIST
+            "whitelist" -> VpnAppListMode.WHITELIST
+            else -> throw IllegalArgumentException("Invalid application filter")
+        }
+        return DpiConnectionOptions(loopback, port, DpiVpnRouting(ipv6 = ipv6, appListMode = appList, apps = apps))
     }
 
     private fun JSONObject.section(name: String): Any? = if (isNull(name)) null else get(name)

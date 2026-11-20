@@ -7,6 +7,7 @@ import com.amurcanov.tgwsproxy.dpi.DpiController
 import com.amurcanov.tgwsproxy.dpi.DpiEngine
 import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
+import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
 import com.amurcanov.tgwsproxy.dpi.DpiVpnEngine
 import com.amurcanov.tgwsproxy.dpi.NativeDpiEngine
 import com.amurcanov.tgwsproxy.dpi.VpnAuthorizer
@@ -75,9 +76,9 @@ object DpiSession {
         journal.update { (it + entry).takeLast(50) }
     }
 
-    /** The loopback endpoint the local engine binds; kept loopback always. */
-    val config: DpiConfig
-        get() = DpiConfig(mode = _mode.value, host = "127.0.0.1", port = 1080)
+    /** Endpoint for the current attempt, not the next edited/imported document. */
+    private val _endpoint = MutableStateFlow<String?>(null)
+    val endpoint = _endpoint.asStateFlow()
 
     /**
      * Fail-closed VPN authorization seam for the UI. It re-samples the slot on
@@ -106,8 +107,18 @@ object DpiSession {
         val activeController = controller ?: return
         val current = activeController.state.value
         if (current !is DpiState.Off && current !is DpiState.Failed) return
+        val options = try {
+            DpiSettingsStore(context).connectionOptions()
+        } catch (_: Exception) {
+            val failure = DpiState.Failed(context.getString(R.string.dpi_backup_error))
+            journalState(context, failure)
+            _state.value = failure
+            return
+        }
+        val hostLabel = if (':' in options.host) "[${options.host}]" else options.host
+        _endpoint.value = "$hostLabel:${options.port}"
         (engine as? DpiVpnEngine)?.replacement = replacement
-        activeController.start(config)
+        activeController.start(DpiConfig(_mode.value, options.host, options.port, vpnRouting = options.routing))
     }
 
     fun stop() {

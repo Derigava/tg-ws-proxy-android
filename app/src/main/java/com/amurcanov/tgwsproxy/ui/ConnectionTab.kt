@@ -73,6 +73,7 @@ fun ConnectionTab(
     // ByeByeDPI module: the controller is the only source of the running verdict.
     val dpiState by DpiSession.state.collectAsStateWithLifecycle()
     val dpiMode by DpiSession.mode.collectAsStateWithLifecycle()
+    val dpiEndpoint by DpiSession.endpoint.collectAsStateWithLifecycle()
 
     if (!isReady || savedSecretKey == "LOADING") {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -136,7 +137,8 @@ fun ConnectionTab(
     }
     val dpiAddressText = when {
         dpiState is DpiState.Running ->
-            if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_mode_vpn) else stringResource(R.string.dpi_mode_socks5)
+            if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_mode_vpn)
+            else dpiEndpoint ?: stringResource(R.string.dpi_mode_socks5)
         dpiState is DpiState.Failed -> (dpiState as DpiState.Failed).reason
         dpiMode == DpiMode.VPN -> stringResource(R.string.dpi_start_hint_vpn)
         else -> stringResource(R.string.dpi_start_hint_socks5)

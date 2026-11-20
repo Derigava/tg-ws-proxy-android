@@ -187,7 +187,7 @@
     <string name="dpi_log_failed">Engine failed</string>
     <string name="dpi_backup_import">Import ByeByeDPI backup</string>
     <string name="dpi_backup_export">Export ByeByeDPI backup</string>
-    <string name="dpi_backup_imported">Backup saved. Active settings were not changed.</string>
+    <string name="dpi_backup_imported">Backup saved. The SOCKS5 endpoint and VPN app filter settings take effect at the next start.</string>
     <string name="dpi_backup_exported">Backup exported</string>
     <string name="dpi_backup_error">Could not read or write the ByeByeDPI backup</string>
 </resources>
