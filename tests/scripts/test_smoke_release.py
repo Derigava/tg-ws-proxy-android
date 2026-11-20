@@ -24,6 +24,13 @@ class ReleaseSmokeTest(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 smoke.validate_runtime([frozenset({123})], RESUMED, text, "")
 
+    def test_launcher_does_not_start_the_owned_vpn(self):
+        foreign = "  * ServiceRecord{123 u0 org.example/org.example.DpiVpnService}"
+        own = f"  * ServiceRecord{{456 u0 {PACKAGE}/com.amurcanov.tgwsproxy.dpi.DpiVpnService}}"
+        smoke.validate_no_vpn_started(foreign, PACKAGE)
+        with self.assertRaisesRegex(ValueError, "VPN started without"):
+            smoke.validate_no_vpn_started(f"{foreign}\n{own}", PACKAGE)
+
     def test_dead_or_restarted_process_cannot_pass(self):
         for observations in ([], [frozenset()], [frozenset({123}), frozenset()], [frozenset({123}), frozenset({124})]):
             with self.subTest(observations=observations), self.assertRaises(ValueError):
