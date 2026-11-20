@@ -15,11 +15,11 @@ package com.amurcanov.tgwsproxy.dpi
 class VpnAuthorizer(private val sampler: VpnSlotSampler) {
 
     fun authorize(replacement: VpnReplacement?): VpnStartDecision {
-        val first = sampler.sample()
+        val first = sampler.sample(replacement)
         val firstDecision = VpnStartPolicy.decide(first, replacement)
         if (firstDecision !is VpnStartDecision.Start) return firstDecision
 
-        val second = sampler.sample()
+        val second = sampler.sample(replacement)
         val secondDecision = VpnStartPolicy.decide(second, replacement)
         if (secondDecision is VpnStartDecision.Start) return VpnStartDecision.Start
         return VpnStartDecision.Refuse(recheckReason(first, second))
@@ -32,7 +32,7 @@ class VpnAuthorizer(private val sampler: VpnSlotSampler) {
      * only ever produced from a confident, handle-bearing VPN observation.
      */
     fun confirmReplacement(): VpnReplacement {
-        val sample = sampler.sample()
+        val sample = sampler.sample(null)
         require(sample.slot == VpnSlotState.THIRD_PARTY || sample.slot == VpnSlotState.UNKNOWN) {
             "No foreign VPN observed to replace (slot=${sample.slot})"
         }

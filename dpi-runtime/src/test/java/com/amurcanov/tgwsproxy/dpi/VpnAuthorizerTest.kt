@@ -16,7 +16,7 @@ class VpnAuthorizerTest {
     /** Returns each scripted sample in turn; the last one repeats. */
     private class ScriptedSampler(private val samples: List<VpnStartRequest>) : VpnSlotSampler {
         private var index = 0
-        override fun sample(): VpnStartRequest = samples[minOf(index++, samples.size - 1)]
+        override fun sample(replacement: VpnReplacement?): VpnStartRequest = samples[minOf(index++, samples.size - 1)]
     }
 
     private fun authorizer(vararg samples: VpnStartRequest) = VpnAuthorizer(ScriptedSampler(samples.toList()))
@@ -126,6 +126,16 @@ class VpnAuthorizerTest {
             VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
             authorizer(unknown(setOf(2L))).authorize(proof),
         )
+    }
+
+    @Test
+    fun androidPrepareIsDeferredUntilTheObservedForeignVpnWasConfirmed() {
+        val observed = unknown(setOf(1L)).copy(prepared = false)
+        val different = VpnReplacement(VpnSlotState.UNKNOWN, setOf(2L))
+        val matching = VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L))
+        assertEquals(observed, observed.checkConsent(null) { error("must not claim slot") })
+        assertEquals(observed, observed.checkConsent(different) { error("must not claim slot") })
+        assertEquals(observed.copy(prepared = true), observed.checkConsent(matching) { true })
     }
 
     @Test

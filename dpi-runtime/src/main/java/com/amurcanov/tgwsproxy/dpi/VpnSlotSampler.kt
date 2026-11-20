@@ -12,7 +12,7 @@ import android.net.VpnService
  */
 fun interface VpnSlotSampler {
     /** Builds a fresh request snapshot (slot, prepared, lockdown, vpnNetworks). */
-    fun sample(): VpnStartRequest
+    fun sample(replacement: VpnReplacement?): VpnStartRequest
 }
 
 /**
@@ -36,15 +36,12 @@ fun interface VpnSlotSampler {
  * `establish()` is the documented check/establish window.
  */
 class AndroidVpnSlotSampler(private val context: Context) : VpnSlotSampler {
-    override fun sample(): VpnStartRequest {
-        val prepared = runCatching { VpnService.prepare(context) == null }.getOrDefault(false)
-        val observation = observeNetworks()
-        return VpnStartRequest(
-            slot = observation.first,
-            prepared = prepared,
-            lockdown = false,
-            vpnNetworks = observation.second,
-        )
+    override fun sample(replacement: VpnReplacement?): VpnStartRequest {
+        val (slot, networks) = observeNetworks()
+        val observed = VpnStartRequest(slot, prepared = false, vpnNetworks = networks)
+        return observed.checkConsent(replacement) {
+            runCatching { VpnService.prepare(context) == null }.getOrDefault(false)
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -69,4 +66,15 @@ class AndroidVpnSlotSampler(private val context: Context) : VpnSlotSampler {
             VpnSlotState.UNAVAILABLE to emptySet() // fail-closed on observation failure
         }
     }
+}
+
+/** Android can claim the slot during prepare() if this package was pre-consented. */
+internal fun VpnStartRequest.checkConsent(
+    replacement: VpnReplacement?,
+    prepare: () -> Boolean,
+): VpnStartRequest {
+    val decision = VpnStartPolicy.decide(this, replacement)
+    return if (decision == VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)) {
+        copy(prepared = prepare())
+    } else this
 }
