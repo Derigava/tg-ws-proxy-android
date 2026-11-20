@@ -4,6 +4,8 @@ project(dpi_runtime)
 
 # The native engine sources are pinned (immutable) under upstream/byebyedpi/.
 # This module compiles them in place: it never copies or modifies the snapshot.
+# The only local addition is dpi-jni.c, which wraps listen() to expose a
+# native-owned listener signal (see dpi-jni.c).
 set(UPSTREAM_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../../../upstream/byebyedpi/app/src/main/cpp")
 
 file(GLOB BYE_DPI_SRC "${UPSTREAM_CPP}/byedpi/*.c")
@@ -12,7 +14,8 @@ list(REMOVE_ITEM BYE_DPI_SRC "${UPSTREAM_CPP}/byedpi/win_service.c")
 add_library(byedpi SHARED
     ${BYE_DPI_SRC}
     "${UPSTREAM_CPP}/byedpi-jni.c"
-    "${UPSTREAM_CPP}/hev-jni.c")
+    "${UPSTREAM_CPP}/hev-jni.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/dpi-jni.c")
 
 target_include_directories(byedpi PRIVATE
     "${UPSTREAM_CPP}"
@@ -23,5 +26,5 @@ target_compile_options(byedpi PRIVATE
 target_compile_definitions(byedpi PRIVATE ANDROID_APP)
 
 target_link_libraries(byedpi PRIVATE android log dl)
-target_link_options(byedpi PRIVATE "-Wl,--wrap=daemon")
+target_link_options(byedpi PRIVATE "-Wl,--wrap=daemon" "-Wl,--wrap=listen")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")

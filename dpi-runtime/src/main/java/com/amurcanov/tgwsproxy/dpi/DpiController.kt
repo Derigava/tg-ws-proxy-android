@@ -17,8 +17,9 @@ import kotlinx.coroutines.sync.withLock
  *
  * Start and stop are fire-and-forget (safe to call from the UI thread); the
  * engine call runs on [Dispatchers.IO] and is serialized by a mutex so a stop
- * never races an in-flight start. An engine that dies after Running is observed
- * through [DpiEngine.onExit] and drives the state out of Running.
+ * never races an in-flight start. An engine that dies is observed through
+ * [DpiEngine.onExit]: a death after Running leaves Running, and a death during
+ * Starting is recorded and reconciled so Running is never published.
  */
 class DpiController(private val engine: DpiEngine) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -28,6 +29,9 @@ class DpiController(private val engine: DpiEngine) {
     /** Current controller state; collectors see Off/Starting/Running/Stopping/Failed. */
     val state: StateFlow<DpiState> = _state.asStateFlow()
 
+    @Volatile
+    private var deathDuringStart = false
+
     init {
         engine.onExit = { onEngineExit() }
     }
@@ -36,13 +40,16 @@ class DpiController(private val engine: DpiEngine) {
         val current = _state.value
         if (current is DpiState.Starting || current is DpiState.Running) return
         _state.value = DpiState.Starting
+        deathDuringStart = false
         scope.launch {
             mutex.withLock {
                 val result = runCatching { engine.start(config) }.getOrElse {
                     DpiEngineResult.Failed(it.message ?: "engine start failed")
                 }
                 _state.value = when (result) {
-                    is DpiEngineResult.Running -> DpiState.Running(config.mode)
+                    is DpiEngineResult.Running ->
+                        if (deathDuringStart) DpiState.Failed("engine exited during startup")
+                        else DpiState.Running(config.mode)
                     is DpiEngineResult.Failed -> DpiState.Failed(result.reason)
                 }
             }
@@ -63,10 +70,14 @@ class DpiController(private val engine: DpiEngine) {
     }
 
     private fun onEngineExit() {
-        // Only a running session can die unexpectedly; a stop already in flight
-        // (Stopping) or an already-stopped engine (Off) must not be overridden.
-        if (_state.value is DpiState.Running) {
-            _state.value = DpiState.Failed("engine process exited")
+        // A stop already in flight (Stopping), an already-stopped engine (Off),
+        // or an already-failed start (Failed) must not be overridden; a stale
+        // exit is a no-op. A death during Starting is recorded and reconciled in
+        // start(); a death after Running leaves Running.
+        when (val current = _state.value) {
+            is DpiState.Starting -> deathDuringStart = true
+            is DpiState.Running -> _state.value = DpiState.Failed("engine process exited")
+            else -> Unit
         }
     }
 }
