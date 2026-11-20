@@ -1,5 +1,7 @@
 package com.amurcanov.tgwsproxy.dpi
 
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -14,6 +16,34 @@ import java.util.concurrent.TimeUnit
  * previous engine's config or resurrect a stopped engine.
  */
 class DpiControllerStoppingTest {
+
+    @Test
+    fun stopOvertakesQueuedStartEvenWhenAnotherStartFollows() {
+        val tasks = mutableListOf<Runnable>()
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                tasks.add(block)
+            }
+        }
+        val ports = mutableListOf<Int>()
+        val engine = object : DpiEngine {
+            override var onExit: (() -> Unit)? = null
+            override fun start(config: DpiConfig): DpiEngineResult {
+                ports.add(config.port)
+                return DpiEngineResult.Running
+            }
+            override fun stop() = Unit
+        }
+        val controller = DpiController(engine, dispatcher)
+        controller.start(DpiConfig(DpiMode.SOCKS5, "127.0.0.1", 1080))
+        controller.stop()
+        tasks.removeAt(1).run()
+        assertEquals(DpiState.Off, controller.state.value)
+        controller.start(DpiConfig(DpiMode.SOCKS5, "127.0.0.1", 1081))
+        tasks.removeAt(0).run()
+        tasks.removeAt(0).run()
+        assertEquals(listOf(1081), ports)
+    }
 
     /** Engine that blocks inside stop() so the test can hold the Stopping window open. */
     private class BlockingStopEngine : DpiEngine {
