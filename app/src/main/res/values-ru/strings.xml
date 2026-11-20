@@ -233,4 +233,10 @@
     <string name="dpi_strategy_unpin">Открепить</string>
     <string name="dpi_strategy_delete">Удалить</string>
     <string name="dpi_strategy_clear_unpinned">Удалить незакреплённые</string>
+    <string name="dpi_diag_title">Диагностика ByeByeDPI</string>
+    <string name="dpi_diag_endpoint">Адрес</string>
+    <string name="dpi_diag_mode">Режим</string>
+    <string name="dpi_diag_args">Аргументы</string>
+    <string name="dpi_diag_ipv6">IPv6</string>
+    <string name="dpi_diag_apps">Фильтр приложений</string>
 </resources>

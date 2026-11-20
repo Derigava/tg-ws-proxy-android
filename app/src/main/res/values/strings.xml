@@ -234,4 +234,10 @@
     <string name="dpi_strategy_unpin">Unpin</string>
     <string name="dpi_strategy_delete">Delete</string>
     <string name="dpi_strategy_clear_unpinned">Clear unpinned</string>
+    <string name="dpi_diag_title">ByeByeDPI diagnostics</string>
+    <string name="dpi_diag_endpoint">Endpoint</string>
+    <string name="dpi_diag_mode">Mode</string>
+    <string name="dpi_diag_args">Arguments</string>
+    <string name="dpi_diag_ipv6">IPv6</string>
+    <string name="dpi_diag_apps">App filter</string>
 </resources>
