@@ -1,15 +1,19 @@
-"""Reject tampering of the pinned ByeByeDPI reference: files, submodules and tag.
+"""Reject tampering of the pinned ByeByeDPI reference: files, nested sources,
+dependency licensing, submodules and tag.
 
 The vendored snapshot is the immutability baseline for the later native
-integration and update CI.  Three independent failure modes must each end in a
+integration and update CI.  Five independent failure modes must each end in a
 non-zero exit from the sync script:
 
-* a changed vendored file            -> offline ``--check`` fails;
-* a changed submodule commit         -> online ``--ref`` resolution fails;
-* a moved tag                        -> online ``--ref`` resolution fails.
+* a changed vendored parent file               -> offline ``--check`` fails;
+* a changed nested dependency source           -> offline ``--check`` fails;
+* a tampered dependency license inventory      -> offline ``--check`` fails;
+* a changed submodule commit                   -> online ``--ref`` resolution fails;
+* a moved tag                                  -> online ``--ref`` resolution fails.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -32,12 +36,17 @@ sync = module("sync_byebyedpi")
 
 TAG = "v.1.8.2"
 COMMIT = "96a3c1ff555043d915af814aa4f0e9a572c89aba"
-SUBMODULE_COMMIT = "ba532298de7b28cfe854aea83d061369d13ca290"
-GITMODULES = (
-    '[submodule "byedpi"]\n'
-    "\tpath = app/src/main/cpp/byedpi\n"
-    "\turl = https://github.com/hufrea/byedpi.git\n"
-)
+SUB_URL = "https://github.com/example/sub.git"
+NESTED_URL = "https://github.com/example/nested.git"
+GITMODULES = '[submodule "sub"]\n\tpath = sub\n\turl = https://github.com/example/sub.git\n'
+NESTED_GITMODULES = '[submodule "nested"]\n\tpath = nested\n\turl = https://github.com/example/nested.git\n'
+
+GPL = b"GPL-3.0-only license text\n"
+MIT = b"MIT license text\n"
+BSD = b"BSD-3-Clause license text\n"
+MAIN_KT = b"package demo\n"
+ENGINE_C = b"int main(void){return 0;}\n"
+CORE_C = b"void core(void){}\n"
 
 
 def sha(data: bytes) -> str:
@@ -45,28 +54,57 @@ def sha(data: bytes) -> str:
 
 
 def build_fixture(directory: Path):
-    """Write a minimal, internally consistent vendor tree and lock file."""
+    """Write a minimal, internally consistent v2 vendor tree and lock file.
+
+    The fixture has two nesting levels: parent -> ``sub`` -> ``nested``, so the
+    offline checks exercise recursive file hashing and per-dependency licenses.
+    """
     vendor = directory / "byebyedpi"
     (vendor / "app").mkdir(parents=True)
-    (vendor / "LICENSE").write_bytes(b"GPL-3.0-only license text\n")
+    (vendor / "sub" / "src").mkdir(parents=True)
+    (vendor / "sub" / "nested" / "core").mkdir(parents=True)
+    (vendor / "LICENSE").write_bytes(GPL)
     (vendor / ".gitmodules").write_bytes(GITMODULES.encode())
-    (vendor / "app" / "Main.kt").write_bytes(b"package demo\n")
+    (vendor / "app" / "Main.kt").write_bytes(MAIN_KT)
+    (vendor / "sub" / "LICENSE").write_bytes(MIT)
+    (vendor / "sub" / ".gitmodules").write_bytes(NESTED_GITMODULES.encode())
+    (vendor / "sub" / "src" / "engine.c").write_bytes(ENGINE_C)
+    (vendor / "sub" / "nested" / "LICENSE").write_bytes(BSD)
+    (vendor / "sub" / "nested" / "core" / "core.c").write_bytes(CORE_C)
     lock = {
+        "schema": 2,
         "repository": sync.REPOSITORY,
         "url": sync.URL,
         "tag": TAG,
         "commit": COMMIT,
-        "submodules": {
-            "app/src/main/cpp/byedpi": {
-                "url": "https://github.com/hufrea/byedpi.git",
-                "commit": SUBMODULE_COMMIT,
-            }
-        },
-        "licenses": {"LICENSE": {"spdx": "GPL-3.0-only", "sha256": sha(b"GPL-3.0-only license text\n")}},
+        "licenses": {"LICENSE": {"spdx": "GPL-3.0-only", "sha256": sha(GPL)}},
         "files": {
             ".gitmodules": sha(GITMODULES.encode()),
-            "LICENSE": sha(b"GPL-3.0-only license text\n"),
-            "app/Main.kt": sha(b"package demo\n"),
+            "LICENSE": sha(GPL),
+            "app/Main.kt": sha(MAIN_KT),
+        },
+        "submodules": {
+            "sub": {
+                "url": SUB_URL,
+                "commit": "a" * 40,
+                "licenses": {"LICENSE": {"spdx": "MIT", "sha256": sha(MIT)}},
+                "files": {
+                    ".gitmodules": sha(NESTED_GITMODULES.encode()),
+                    "LICENSE": sha(MIT),
+                    "src/engine.c": sha(ENGINE_C),
+                },
+                "submodules": {
+                    "nested": {
+                        "url": NESTED_URL,
+                        "commit": "b" * 40,
+                        "licenses": {"LICENSE": {"spdx": "BSD-3-Clause", "sha256": sha(BSD)}},
+                        "files": {
+                            "LICENSE": sha(BSD),
+                            "core/core.c": sha(CORE_C),
+                        },
+                    }
+                },
+            }
         },
     }
     lock_path = directory / "byebyedpi.lock.json"
@@ -74,33 +112,44 @@ def build_fixture(directory: Path):
     return vendor, lock_path, lock
 
 
+def patch_paths(lock_path, vendor):
+    stack = contextlib.ExitStack()
+    stack.enter_context(mock.patch.object(sync, "LOCK", lock_path))
+    stack.enter_context(mock.patch.object(sync, "VENDOR", vendor))
+    return stack
+
+
 class IntegrityTests(unittest.TestCase):
     def test_changed_file_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             vendor, lock_path, _ = build_fixture(Path(temporary))
             (vendor / "app" / "Main.kt").write_bytes(b"package demo CHANGED\n")
-            with mock.patch.object(sync, "LOCK", lock_path), mock.patch.object(sync, "VENDOR", vendor):
+            with patch_paths(lock_path, vendor):
                 with self.assertRaises(SystemExit) as raised:
                     sync.main(["--check"])
                 self.assertEqual(raised.exception.code, 1)
 
+    def test_nested_source_tamper_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            vendor, _, lock = build_fixture(Path(temporary))
+            (vendor / "sub" / "nested" / "core" / "core.c").write_bytes(b"void core(void){ int x; }\n")
+            with self.assertRaisesRegex(ValueError, "modified.*core\\.c"):
+                sync.validate(vendor, lock)
+
+    def test_dependency_license_inventory_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            vendor, _, lock = build_fixture(Path(temporary))
+            del lock["submodules"]["sub"]["licenses"]
+            with self.assertRaisesRegex(ValueError, "Missing licenses"):
+                sync.validate(vendor, lock)
+
     def test_changed_submodule_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             vendor, lock_path, _ = build_fixture(Path(temporary))
-
-            def fake_fetch(url: str) -> bytes:
-                if f"/commits/{TAG}" in url:
-                    return json.dumps({"sha": COMMIT}).encode()
-                if "/git/trees/" in url and "recursive=1" in url:
-                    moved = "1" * 40
-                    tree = [{"path": "app/src/main/cpp/byedpi", "mode": "160000", "sha": moved}]
-                    return json.dumps({"tree": tree, "truncated": False}).encode()
-                if ".gitmodules" in url:
-                    return GITMODULES.encode()
-                raise AssertionError(f"unexpected fetch: {url}")
-
-            with mock.patch.object(sync, "LOCK", lock_path), mock.patch.object(sync, "VENDOR", vendor), \
-                    mock.patch.object(sync, "fetch", fake_fetch):
+            moved = {"sub": {"url": SUB_URL, "commit": "1" * 40}}
+            with patch_paths(lock_path, vendor), \
+                    mock.patch.object(sync, "resolve_commit", return_value=COMMIT), \
+                    mock.patch.object(sync, "resolve_submodules", return_value=moved):
                 with self.assertRaises(SystemExit) as raised:
                     sync.main(["--ref", TAG])
                 self.assertEqual(raised.exception.code, 1)
@@ -108,15 +157,8 @@ class IntegrityTests(unittest.TestCase):
     def test_tag_moved_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             vendor, lock_path, _ = build_fixture(Path(temporary))
-
-            def fake_fetch(url: str) -> bytes:
-                if f"/commits/{TAG}" in url:
-                    moved = "2" * 40
-                    return json.dumps({"sha": moved}).encode()
-                raise AssertionError(f"unexpected fetch: {url}")
-
-            with mock.patch.object(sync, "LOCK", lock_path), mock.patch.object(sync, "VENDOR", vendor), \
-                    mock.patch.object(sync, "fetch", fake_fetch):
+            with patch_paths(lock_path, vendor), \
+                    mock.patch.object(sync, "resolve_commit", return_value="2" * 40):
                 with self.assertRaises(SystemExit) as raised:
                     sync.main(["--ref", TAG])
                 self.assertEqual(raised.exception.code, 1)
@@ -124,7 +166,7 @@ class IntegrityTests(unittest.TestCase):
     def test_clean_checkout_passes_offline(self):
         with tempfile.TemporaryDirectory() as temporary:
             vendor, lock_path, _ = build_fixture(Path(temporary))
-            with mock.patch.object(sync, "LOCK", lock_path), mock.patch.object(sync, "VENDOR", vendor):
+            with patch_paths(lock_path, vendor):
                 sync.main(["--check"])  # must not raise
 
 

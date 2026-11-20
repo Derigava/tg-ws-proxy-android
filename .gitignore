@@ -36,3 +36,8 @@ __pycache__/
 .pytest_cache/
 *.pyc
 outputs/
+
+# Вендор ByeByeDPI содержит собственные .gitignore upstream-репозиториев (например
+# `bin` в hev-socks5-tunnel), которые скрывают закоммиченные upstream'ом файлы
+# (third-part/wintun/bin/wintun.dll). Снимок добавляется принудительно:
+#   git add -f upstream/byebyedpi
