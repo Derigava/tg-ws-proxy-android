@@ -1,5 +1,6 @@
 package com.amurcanov.tgwsproxy.dpi
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,8 +25,13 @@ import kotlinx.coroutines.sync.withLock
  * both orders of a death just before or after Ready end in Failed, never a stale
  * Running.
  */
-class DpiController(private val engine: DpiEngine) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+class DpiController internal constructor(
+    private val engine: DpiEngine,
+    dispatcher: CoroutineDispatcher,
+) {
+    constructor(engine: DpiEngine) : this(engine, Dispatchers.IO)
+
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val mutex = Mutex()
     private val stateLock = Any()
     private val _state = MutableStateFlow<DpiState>(DpiState.Off)
@@ -40,8 +46,10 @@ class DpiController(private val engine: DpiEngine) {
         engine.onExit = { onEngineExit() }
     }
 
+    private var startAttempt = 0L
+
     fun start(config: DpiConfig) {
-        synchronized(stateLock) {
+        val attempt = synchronized(stateLock) {
             val current = _state.value
             // Reject while Starting/Running (already started) and while
             // Stopping: a rapid re-start during stop cleanup must not queue a
@@ -51,9 +59,14 @@ class DpiController(private val engine: DpiEngine) {
             if (current is DpiState.Starting || current is DpiState.Running || current is DpiState.Stopping) return
             _state.value = DpiState.Starting
             deathDuringStart = false
+            ++startAttempt
         }
         scope.launch {
             mutex.withLock {
+                val current = synchronized(stateLock) {
+                    _state.value is DpiState.Starting && startAttempt == attempt
+                }
+                if (!current) return@withLock
                 val result = runCatching { engine.start(config) }.getOrElse {
                     DpiEngineResult.Failed(it.message ?: "engine start failed")
                 }
