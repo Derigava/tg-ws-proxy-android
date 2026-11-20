@@ -51,6 +51,17 @@ internal fun DpiStrategyEditor() {
     var noDomain by remember { mutableStateOf(store.bool("byedpi_no_domain", false)) }
     var tcpFastOpen by remember { mutableStateOf(store.bool("byedpi_tcp_fast_open", false)) }
     var dropSack by remember { mutableStateOf(store.bool("byedpi_drop_sack", false)) }
+    var fakeTtl by remember { mutableStateOf(store.int("byedpi_fake_ttl", 8).toString()) }
+    var fakeSni by remember { mutableStateOf(store.string("byedpi_fake_sni", "www.iana.org")) }
+    var fakeOffset by remember { mutableStateOf(store.int("byedpi_fake_offset", 0).toString()) }
+    var oobData by remember { mutableStateOf(store.string("byedpi_oob_data", "a")) }
+    var hostMixedCase by remember { mutableStateOf(store.bool("byedpi_host_mixed_case", false)) }
+    var domainMixedCase by remember { mutableStateOf(store.bool("byedpi_domain_mixed_case", false)) }
+    var hostRemoveSpaces by remember { mutableStateOf(store.bool("byedpi_host_remove_spaces", false)) }
+    var tlsrecEnabled by remember { mutableStateOf(store.bool("byedpi_tlsrec_enabled", false)) }
+    var tlsrecPosition by remember { mutableStateOf(store.int("byedpi_tlsrec_position", 0).toString()) }
+    var tlsrecAtSni by remember { mutableStateOf(store.bool("byedpi_tlsrec_at_sni", false)) }
+    var udpFakeCount by remember { mutableStateOf(store.int("byedpi_udp_fake_count", 1).toString()) }
 
     fun persist(key: String, value: Any?) {
         runCatching { store.updateSettings(mapOf(key to value)) }
@@ -143,6 +154,95 @@ internal fun DpiStrategyEditor() {
             title = stringResource(R.string.dpi_strategy_drop_sack),
             checked = dropSack,
             onCheckedChange = { dropSack = it; persist("byedpi_drop_sack", it) },
+        )
+
+        if (method == "fake") {
+            SectionLabel(stringResource(R.string.dpi_strategy_fake))
+            BrandField(
+                value = fakeTtl,
+                onValueChange = { filtered ->
+                    val digits = filtered.filter(Char::isDigit)
+                    fakeTtl = digits
+                    digits.toIntOrNull()?.let { persist("byedpi_fake_ttl", it) }
+                },
+                placeholder = stringResource(R.string.dpi_strategy_fake_ttl),
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+            )
+            BrandField(
+                value = fakeSni,
+                onValueChange = { fakeSni = it; persist("byedpi_fake_sni", it) },
+                placeholder = stringResource(R.string.dpi_strategy_fake_sni),
+            )
+            BrandField(
+                value = fakeOffset,
+                onValueChange = { filtered ->
+                    val digits = filtered.filter(Char::isDigit)
+                    fakeOffset = digits
+                    digits.toIntOrNull()?.let { persist("byedpi_fake_offset", it) }
+                },
+                placeholder = stringResource(R.string.dpi_strategy_fake_offset),
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+            )
+        }
+        if (method == "oob" || method == "disoob") {
+            BrandField(
+                value = oobData,
+                onValueChange = { oobData = it; persist("byedpi_oob_data", it) },
+                placeholder = stringResource(R.string.dpi_strategy_oob_data),
+            )
+        }
+
+        SectionLabel(stringResource(R.string.dpi_strategy_mod_http))
+        SwitchRow(
+            title = stringResource(R.string.dpi_strategy_host_mixed_case),
+            checked = hostMixedCase,
+            onCheckedChange = { hostMixedCase = it; persist("byedpi_host_mixed_case", it) },
+        )
+        SwitchRow(
+            title = stringResource(R.string.dpi_strategy_domain_mixed_case),
+            checked = domainMixedCase,
+            onCheckedChange = { domainMixedCase = it; persist("byedpi_domain_mixed_case", it) },
+        )
+        SwitchRow(
+            title = stringResource(R.string.dpi_strategy_host_remove_spaces),
+            checked = hostRemoveSpaces,
+            onCheckedChange = { hostRemoveSpaces = it; persist("byedpi_host_remove_spaces", it) },
+        )
+
+        SectionLabel(stringResource(R.string.dpi_strategy_tlsrec))
+        SwitchRow(
+            title = stringResource(R.string.dpi_strategy_tlsrec_enabled),
+            checked = tlsrecEnabled,
+            onCheckedChange = { tlsrecEnabled = it; persist("byedpi_tlsrec_enabled", it) },
+        )
+        if (tlsrecEnabled) {
+            BrandField(
+                value = tlsrecPosition,
+                onValueChange = { filtered ->
+                    val digits = filtered.filter(Char::isDigit)
+                    tlsrecPosition = digits
+                    digits.toIntOrNull()?.let { persist("byedpi_tlsrec_position", it) }
+                },
+                placeholder = stringResource(R.string.dpi_strategy_tlsrec_position),
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
+            )
+            SwitchRow(
+                title = stringResource(R.string.dpi_strategy_tlsrec_at_sni),
+                checked = tlsrecAtSni,
+                onCheckedChange = { tlsrecAtSni = it; persist("byedpi_tlsrec_at_sni", it) },
+            )
+        }
+
+        SectionLabel(stringResource(R.string.dpi_strategy_udp))
+        BrandField(
+            value = udpFakeCount,
+            onValueChange = { filtered ->
+                val digits = filtered.filter(Char::isDigit)
+                udpFakeCount = digits
+                digits.toIntOrNull()?.let { persist("byedpi_udp_fake_count", it) }
+            },
+            placeholder = stringResource(R.string.dpi_strategy_udp_fake_count),
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
         )
     }
 }
