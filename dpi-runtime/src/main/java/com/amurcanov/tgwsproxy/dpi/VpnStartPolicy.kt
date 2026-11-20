@@ -82,42 +82,28 @@ sealed interface VpnStartDecision {
  * start is aborted before touching the system VPN slot.
  */
 object VpnStartPolicy {
-    /**
-     * The conservative decision table (lockdown always wins):
-     *
-     * | slot        | prepared | replacement matches fresh slot? | decision                        |
-     * |-------------|----------|----------------------------------|---------------------------------|
-     * | FREE/OURS   | true     | (ignored)                        | Start                           |
-     * | FREE/OURS   | false    | (ignored)                        | Refuse(CONSENT_NOT_GRANTED)     |
-     * | THIRD_PARTY | true     | yes (same slot + same handles)   | Start (deliberate replacement)  |
-     * | THIRD_PARTY | *        | no / null                        | Offer(ownerUncertain=false)     |
-     * | UNKNOWN     | true     | yes (same slot + same handles)   | Start (deliberate replacement)  |
-     * | UNKNOWN     | *        | no / null                        | Offer(ownerUncertain=true)      |
-     * | UNAVAILABLE | *        | (never)                          | Refuse(OBSERVATION_UNAVAILABLE) |
-     *
-     * A replacement is honored only when the proof's slot AND exact network
-     * handles equal the freshly observed slot AND handles, and the OS grant is
-     * valid. Unavailable observation can never authorize a start or replacement.
-     */
+    /** A foreign slot requires matching network handles before requesting OS consent. */
     fun decide(request: VpnStartRequest, replacement: VpnReplacement? = null): VpnStartDecision {
         if (request.lockdown) return VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN)
 
-        return when (request.slot) {
+        when (request.slot) {
             VpnSlotState.UNAVAILABLE ->
-                VpnStartDecision.Refuse(VpnRefuseReason.OBSERVATION_UNAVAILABLE)
+                return VpnStartDecision.Refuse(VpnRefuseReason.OBSERVATION_UNAVAILABLE)
 
-            VpnSlotState.FREE, VpnSlotState.OURS ->
-                if (request.prepared) VpnStartDecision.Start
-                else VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)
+            VpnSlotState.UNKNOWN, VpnSlotState.THIRD_PARTY -> {
+                if (replacement == null) {
+                    return VpnStartDecision.Offer(ownerUncertain = request.slot == VpnSlotState.UNKNOWN)
+                }
+                if (!replacementMatches(request, replacement)) {
+                    return VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED)
+                }
+            }
 
-            VpnSlotState.UNKNOWN ->
-                if (request.prepared && replacementMatches(request, replacement)) VpnStartDecision.Start
-                else VpnStartDecision.Offer(ownerUncertain = true)
-
-            VpnSlotState.THIRD_PARTY ->
-                if (request.prepared && replacementMatches(request, replacement)) VpnStartDecision.Start
-                else VpnStartDecision.Offer(ownerUncertain = false)
+            VpnSlotState.FREE, VpnSlotState.OURS -> Unit
         }
+
+        return if (request.prepared) VpnStartDecision.Start
+        else VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)
     }
 
     private fun replacementMatches(request: VpnStartRequest, replacement: VpnReplacement?): Boolean =

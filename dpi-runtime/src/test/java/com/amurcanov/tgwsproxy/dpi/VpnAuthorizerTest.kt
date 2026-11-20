@@ -113,6 +113,22 @@ class VpnAuthorizerTest {
     }
 
     @Test
+    fun confirmedReplacementRequestsConsentAndCanResumeWithSameProof() {
+        val proof = VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L))
+        val unprepared = unknown(setOf(1L)).copy(prepared = false)
+        assertEquals(
+            VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED),
+            authorizer(unprepared).authorize(proof),
+        )
+        assertEquals(VpnStartDecision.Start, authorizer(unknown(setOf(1L))).authorize(proof))
+        assertEquals(VpnStartDecision.Start, authorizer(freePrepared()).authorize(proof))
+        assertEquals(
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
+            authorizer(unknown(setOf(2L))).authorize(proof),
+        )
+    }
+
+    @Test
     fun revokedOrDeniedPrepareRefuses() {
         assertEquals(
             VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED),

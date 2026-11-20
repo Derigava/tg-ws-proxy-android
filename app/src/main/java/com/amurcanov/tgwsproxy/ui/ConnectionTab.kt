@@ -45,6 +45,8 @@ import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.dpi.VpnPrepareContract
 import com.amurcanov.tgwsproxy.dpi.VpnRefuseReason
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.amurcanov.tgwsproxy.dpi.VpnSlotState
 import com.amurcanov.tgwsproxy.dpi.VpnReplacement
 import com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyPickerDialog
 import com.amurcanov.tgwsproxy.dpi.VpnStartDecision
@@ -151,6 +153,8 @@ fun ConnectionTab(
     // Immutable replacement proof minted before the offer dialog is shown; reused
     // on confirm, never re-minted against a freshly sampled VPN.
     var pendingOffer by remember { mutableStateOf<Pair<Boolean, VpnReplacement>?>(null) }
+    var pendingConsentSlot by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsentNetworks by rememberSaveable { mutableStateOf<LongArray?>(null) }
     var showStrategyPicker by remember { mutableStateOf(false) }
 
     // Strings resolved once in composition (stringResource is @Composable), then
@@ -170,9 +174,13 @@ fun ConnectionTab(
     // re-enters startVpn only after the launcher is available.
     lateinit var prepareConsentLauncher: androidx.activity.result.ActivityResultLauncher<Unit>
 
-    val handleRefusal: (VpnRefuseReason) -> Unit = { reason ->
+    val handleRefusal: (VpnRefuseReason, VpnReplacement?, Boolean) -> Unit = { reason, proof, canPrompt ->
         when (reason) {
-            VpnRefuseReason.CONSENT_NOT_GRANTED -> prepareConsentLauncher.launch(Unit)
+            VpnRefuseReason.CONSENT_NOT_GRANTED -> if (canPrompt) {
+                pendingConsentSlot = proof?.confirmedSlot?.name
+                pendingConsentNetworks = proof?.confirmedNetworks?.toLongArray()
+                prepareConsentLauncher.launch(Unit)
+            } else showDpiError(msgConsentLost)
             VpnRefuseReason.CONSENT_LOST -> showDpiError(msgConsentLost)
             VpnRefuseReason.LOCKDOWN -> showDpiError(msgLockdown)
             VpnRefuseReason.SLOT_CHANGED -> showDpiError(msgSlotChanged)
@@ -180,10 +188,10 @@ fun ConnectionTab(
         }
     }
 
-    val startVpn: () -> Unit = {
+    val startVpn: (VpnReplacement?, Boolean) -> Unit = { replacement, canPrompt ->
         val authorizer = DpiSession.vpnAuthorizer(context)
-        when (val decision = authorizer.authorize(null)) {
-            is VpnStartDecision.Start -> DpiSession.start(context)
+        when (val decision = authorizer.authorize(replacement)) {
+            is VpnStartDecision.Start -> DpiSession.start(context, replacement)
             is VpnStartDecision.Offer -> {
                 // Capture the proof bound to the *currently observed* VPN before
                 // showing the offer; a proof is never minted after confirmation.
@@ -194,12 +202,12 @@ fun ConnectionTab(
                     pendingOffer = decision.ownerUncertain to proof
                 }
             }
-            is VpnStartDecision.Refuse -> handleRefusal(decision.reason)
+            is VpnStartDecision.Refuse -> handleRefusal(decision.reason, replacement, canPrompt)
         }
     }
 
     val startDpi: () -> Unit = {
-        if (dpiMode == DpiMode.VPN) startVpn() else DpiSession.start(context)
+        if (dpiMode == DpiMode.VPN) startVpn(null, true) else DpiSession.start(context)
     }
 
     val onToggleDpi: () -> Unit = {
@@ -207,7 +215,12 @@ fun ConnectionTab(
     }
 
     prepareConsentLauncher = rememberLauncherForActivityResult(VpnPrepareContract()) { granted ->
-        if (granted) startVpn() else showDpiError(msgConsentDenied)
+        val proof = pendingConsentSlot?.let { slot ->
+            VpnReplacement(VpnSlotState.valueOf(slot), pendingConsentNetworks?.toSet() ?: emptySet())
+        }
+        pendingConsentSlot = null
+        pendingConsentNetworks = null
+        if (granted) startVpn(proof, false) else showDpiError(msgConsentDenied)
     }
 
     Column(
@@ -305,14 +318,8 @@ fun ConnectionTab(
             BrandButton(
                 text = stringResource(R.string.vpn_offer_replace),
                 onClick = {
-                    val captured = proof
                     pendingOffer = null
-                    val authorizer = DpiSession.vpnAuthorizer(context)
-                    when (val decision = authorizer.authorize(captured)) {
-                        is VpnStartDecision.Start -> DpiSession.start(context, captured)
-                        is VpnStartDecision.Offer -> handleRefusal(VpnRefuseReason.SLOT_CHANGED)
-                        is VpnStartDecision.Refuse -> handleRefusal(decision.reason)
-                    }
+                    startVpn(proof, true)
                 }
             )
             Spacer(Modifier.height(8.dp))
