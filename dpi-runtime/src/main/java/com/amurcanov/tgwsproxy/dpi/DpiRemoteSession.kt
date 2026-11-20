@@ -30,6 +30,9 @@ class DpiRemoteSession private constructor(
         false
     }
 
+    class StatusUnavailableException(mode: DpiMode) :
+        IllegalStateException("DPI status unavailable for $mode")
+
     companion object {
         internal const val ACTION_STATUS = "io.github.derigava.tgwsproxy.dpi.STATUS"
         private const val QUERY = 1
@@ -61,6 +64,7 @@ class DpiRemoteSession private constructor(
             val intent = serviceIntent(context, mode).setAction(ACTION_STATUS)
             if (!isStarted(context, intent.component)) return null
             val result = CompletableDeferred<DpiRemoteSession?>()
+            val unavailable = StatusUnavailableException(mode)
             val connection = object : ServiceConnection {
                 override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                     val receiver = Messenger(Handler(Looper.getMainLooper()) { reply ->
@@ -73,18 +77,27 @@ class DpiRemoteSession private constructor(
                     try {
                         Messenger(binder).send(Message.obtain(null, QUERY).apply { replyTo = receiver })
                     } catch (_: RemoteException) {
-                        result.complete(null)
+                        result.completeExceptionally(unavailable)
                     }
                 }
-                override fun onServiceDisconnected(name: ComponentName) { result.complete(null) }
-                override fun onBindingDied(name: ComponentName) { result.complete(null) }
-                override fun onNullBinding(name: ComponentName) { result.complete(null) }
+                override fun onServiceDisconnected(name: ComponentName) { result.completeExceptionally(unavailable) }
+                override fun onBindingDied(name: ComponentName) { result.completeExceptionally(unavailable) }
+                override fun onNullBinding(name: ComponentName) { result.completeExceptionally(unavailable) }
             }
             if (!context.bindService(intent, connection, 0)) {
+                if (isStarted(context, intent.component)) throw unavailable
                 return null
             }
             return try {
-                withTimeoutOrNull(QUERY_TIMEOUT_MS) { result.await() }
+                val received = withTimeoutOrNull(QUERY_TIMEOUT_MS) {
+                    result.await()
+                    true
+                } ?: false
+                if (received) result.await()
+                else throw unavailable
+            } catch (e: StatusUnavailableException) {
+                if (isStarted(context, intent.component)) throw e
+                null
             } finally {
                 context.unbindService(connection)
             }
@@ -92,7 +105,11 @@ class DpiRemoteSession private constructor(
 
         /** Stops a started service even when the application has no local controller. */
         suspend fun stopExisting(context: Context, mode: DpiMode): Boolean {
-            val session = inspect(context, mode)
+            val session = try {
+                inspect(context, mode)
+            } catch (_: StatusUnavailableException) {
+                null
+            }
             if (session == null) {
                 val intent = serviceIntent(context, mode)
                 if (!isStarted(context, intent.component)) return true

@@ -35,10 +35,13 @@ class DpiLifecycleInstrumentedTest {
     private val context = instrumentation.targetContext
 
     @Test
-    fun newHolderRestoresSocks5AndUninitializedHolderCanStopIt() = withForeground {
+    fun newHolderRestoresSocks5AndAnIdleControllerCanStopIt() = withForeground {
+        val previouslyIdle = DpiSessionHolder()
+        withContext(Dispatchers.Main) { previouslyIdle.awaitRestoration(context) }
+        assertEquals(DpiState.Off, previouslyIdle.state.value)
         val config = DpiConfig(DpiMode.SOCKS5, port = freePort())
         assertEquals(DpiEngineResult.Running, NativeDpiEngine(context).start(config))
-        assertRestoresAndStops(config)
+        assertRestoresAndStops(config, previouslyIdle)
     }
 
     @Suppress("DEPRECATION")
@@ -68,17 +71,19 @@ class DpiLifecycleInstrumentedTest {
         }
     }
 
-    private suspend fun assertRestoresAndStops(config: DpiConfig) = withContext(Dispatchers.Main) {
+    private suspend fun assertRestoresAndStops(
+        config: DpiConfig,
+        stopFrom: DpiSessionHolder = DpiSessionHolder(),
+    ) = withContext(Dispatchers.Main) {
         val restored = DpiSessionHolder()
         restored.awaitRestoration(context)
         assertEquals(DpiState.Running(config.mode), restored.state.value)
         assertEquals(config.mode, restored.mode.value)
         assertEquals("127.0.0.1:${config.port}", restored.endpoint.value)
 
-        val fresh = DpiSessionHolder()
-        fresh.stop(context)
-        fresh.awaitRestoration(context)
-        assertEquals(DpiState.Off, fresh.state.value)
+        stopFrom.stop(context)
+        stopFrom.awaitRestoration(context)
+        assertEquals(DpiState.Off, stopFrom.state.value)
         withTimeout(8_000) { restored.state.first { it is DpiState.Failed } }
         assertNull(DpiRemoteSession.inspect(context, config.mode))
     }

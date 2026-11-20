@@ -40,7 +40,7 @@ import kotlin.concurrent.thread
  * Commands are private (service not exported) and use a namespace distinct
  * from the Telegram proxy and the SOCKS5 [DpiProxyService]. The service never
  * trusts a start intent: it re-samples the slot and re-runs [VpnStartPolicy.decide]
- * immediately before [establish], so a raw (in-app) start intent cannot bypass
+ * immediately before `Builder.establish()`, so a raw (in-app) start intent cannot bypass
  * an authorization that is no longer valid. A stop/revoke kills the `:vpn`
  * process only, so the pinned engine's sticky native globals are reset without
  * ever touching the Telegram process.
@@ -228,6 +228,7 @@ class DpiVpnService : VpnService() {
         replacement: VpnReplacement?,
     ) {
         try {
+            val builder = vpnBuilder(routing)
             // Immediately before establish: independently re-sample the slot and
             // re-decide with the attempt's replacement proof, so a raw (in-app)
             // start intent cannot bypass an authorization that is no longer
@@ -256,7 +257,11 @@ class DpiVpnService : VpnService() {
                 check(attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
                     "VPN startup deadline expired"
                 }
-                val fd = establish(routing)
+                val fd = builder.establish() ?: error("VPN connection failed")
+                if (!attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
+                    fd.close()
+                    error("VPN startup deadline expired while establishing the tunnel")
+                }
                 tunFd = fd
                 tunnelThread = thread(name = "HEV") {
                     // startTunnel blocks in the native event loop until stopTunnel;
@@ -304,7 +309,7 @@ class DpiVpnService : VpnService() {
     }
 
     @Suppress("DEPRECATION")
-    private fun establish(routing: DpiVpnRouting): ParcelFileDescriptor {
+    private fun vpnBuilder(routing: DpiVpnRouting): Builder {
         val builder = Builder()
         builder.setSession("ByeDPI")
             .addAddress("10.10.10.10", 32)
@@ -341,7 +346,7 @@ class DpiVpnService : VpnService() {
             },
         )
 
-        return builder.establish() ?: throw IllegalStateException("VPN connection failed")
+        return builder
     }
 
     @Suppress("DEPRECATION")

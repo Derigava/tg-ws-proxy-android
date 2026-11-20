@@ -98,6 +98,7 @@ internal class DpiSessionHolder {
 
     /** Switches mode only while Off; rejects (and reports) otherwise. */
     fun switchMode(context: Context, newMode: DpiMode): Boolean {
+        if (stopBeforeRestoration?.isActive == true) return false
         initialize(context)
         val current = controller?.state?.value ?: return false
         if (current !is DpiState.Off && current !is DpiState.Failed) return false
@@ -146,8 +147,10 @@ internal class DpiSessionHolder {
 
     fun stop(context: Context) {
         commandVersion++
-        controller?.let {
-            it.stop()
+        val local = controller
+        val current = local?.state?.value
+        if (local != null && current != DpiState.Off && current !is DpiState.Failed) {
+            local.stop()
             return
         }
         if (stopBeforeRestoration?.isActive == true) return
@@ -172,21 +175,26 @@ internal class DpiSessionHolder {
         val appContext = context.applicationContext
         _state.value = DpiState.Starting
         val job = scope.launch(start = CoroutineStart.LAZY) {
-            val remote = coroutineScope {
-                val vpn = async { DpiRemoteSession.inspect(appContext, DpiMode.VPN) }
-                val socks5 = async { DpiRemoteSession.inspect(appContext, DpiMode.SOCKS5) }
-                vpn.await() ?: socks5.await()
-            }
-            var active = remote
-            if (remote != null) {
-                _mode.value = remote.mode
-                _endpoint.value = remote.endpoint
-                while (active != null && !active.ready) {
-                    delay(100)
-                    active = DpiRemoteSession.inspect(appContext, remote.mode)
+            try {
+                val remote = coroutineScope {
+                    val vpn = async { DpiRemoteSession.inspect(appContext, DpiMode.VPN) }
+                    val socks5 = async { DpiRemoteSession.inspect(appContext, DpiMode.SOCKS5) }
+                    vpn.await() ?: socks5.await()
                 }
+                var active = remote
+                if (remote != null) {
+                    _mode.value = remote.mode
+                    _endpoint.value = remote.endpoint
+                    while (active != null && !active.ready) {
+                        delay(100)
+                        active = DpiRemoteSession.inspect(appContext, remote.mode)
+                    }
+                }
+                rebuild(appContext, active)
+            } catch (e: DpiRemoteSession.StatusUnavailableException) {
+                rebuild(appContext)
+                _state.value = DpiState.Failed(e.message ?: "DPI state could not be restored")
             }
-            rebuild(appContext, active)
         }
         restoration = job
         job.start()
