@@ -15,11 +15,17 @@
 
 <p align="center"><a href="#english">English</a></p>
 
-TG WS Proxy поднимает на телефоне локальный MTProto-прокси, а Telegram подключается к нему как к обычному прокси. Root и VPN не нужны. Движок — исходное Python-ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) без изменений, Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
+TG-WS Proxy — одно приложение с двумя независимыми модулями:
+
+- **TG-WS** поднимает локальный MTProto-прокси, а Telegram подключается к нему как к обычному прокси. VPN для этого модуля не нужен.
+- **ByeByeDPI** — нативный обход DPI. По умолчанию работает как системный VPN для всего телефона, второй режим — локальный SOCKS5. Оба режима без root.
 
 ```text
 Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
+Трафик приложений → VPN ByeByeDPI (или SOCKS5 127.0.0.1:1080) → интернет
 ```
+
+Ядро TG-WS — исходное Python-ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) без изменений; нативная часть ByeByeDPI — [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2` с её зависимостями. Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
 
 | Запуск | Работает | Настройки | Логи |
 |:---:|:---:|:---:|:---:|
@@ -29,8 +35,10 @@ Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
 
 1. Скачай `tgwsproxy-*-arm64.apk` из [последнего релиза](https://github.com/Derigava/tg-ws-proxy-android/releases/latest) и установи. Нужны Android 7.0+ и ARM64.
 2. Открой приложение и разреши уведомления, чтобы видеть состояние прокси и останавливать его из шторки. Параметры работы в фоне описаны в разделе [«Доступы»](#доступы).
-3. Нажми кнопку со значком питания и дождись `[OK] ПОДКЛЮЧЕНО`.
+3. Нажми кнопку TG-WS со значком питания и дождись `[OK] ПОДКЛЮЧЕНО`.
 4. Нажми «Применить в Telegram» и подтверди подключение в клиенте. Если клиентов несколько, приложение спросит, какой открыть.
+
+Правая кнопка запускает ByeByeDPI: при первом включении Android спросит согласие на VPN, потом появится уведомление. Если уже работает другой VPN, приложение предложит заменить его (с явным подтверждением), перейти на SOCKS5 или отменить. SOCKS5 работает без VPN и занимает `127.0.0.1:1080`.
 
 Для ручной настройки на главном экране есть адрес, порт, секрет и ссылка `tg://proxy`. После смены настроек перезапусти прокси.
 
@@ -147,7 +155,8 @@ python scripts/sync_upstream.py --check
 ## Что важно знать
 
 - Приложение неофициальное и не связано с Telegram.
-- Это прокси для Telegram, а не системный VPN: другой трафик через него не идёт.
+- Модуль TG-WS — это прокси для Telegram, а не системный VPN: другой трафик через него не идёт. Модуль ByeByeDPI по умолчанию обслуживает весь телефон через системный VPN или работает как локальный SOCKS5.
+- ByeByeDPI не обещает шифрование и не меняет твой IP: он усложняет обнаружение трафика DPI-системой. Подбор стратегии не гарантирует доступ к любому сайту у любого провайдера.
 - Прокси слушает `127.0.0.1`, поэтому доступен только на этом телефоне. Адрес `0.0.0.0` в настройках открывает его всей локальной сети.
 - При первом применении выбери клиент, которому передать адрес, порт и секрет. Приложение запоминает выбор вместе с подписью клиента.
 - Прокси подключается к Telegram и в зависимости от настроек использует твой Worker или общий Cloudflare-прокси. Оператор промежуточного узла может видеть IP и параметры соединения. Flowseal обновляет список общих доменов с GitHub.
@@ -158,7 +167,8 @@ python scripts/sync_upstream.py --check
 ## Лицензии и авторы
 
 - Android-приложение: [GPLv3](LICENSE). Проект основан на работе [amurcanov](https://github.com/amurcanov/tg-ws-proxy-android), история коммитов сохранена. Поскольку оригинальный репозиторий сейчас архивирован, я продолжаю развивать Android-реализацию, исправлять проблемы, описанные в Issues, и поддерживать совместимость с актуальным ядром Flowseal.
-- Ядро: [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy).
+- Ядро TG-WS: [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy).
+- Нативная часть ByeByeDPI: [GPL-3.0](upstream/byebyedpi/LICENSE), [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`; встроенные зависимости [hufrea/byedpi](https://github.com/hufrea/byedpi) (MIT), [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) (MIT), hev-socks5-core/hev-task-system/yaml (MIT), [lwip](https://savannah.nongnu.org/projects/lwip/) (BSD-3-Clause) и предустановленный wintun (WireGuard). Состав и лицензии закреплены в `upstream/byebyedpi.lock.json`.
 - Шрифты Unbounded, Onest и JetBrains Mono: [SIL OFL 1.1](licenses/fonts).
 - Знак `derigava_█` не передаётся вместе с кодом, подробности в [NOTICE.md](NOTICE.md).
 
@@ -166,12 +176,19 @@ python scripts/sync_upstream.py --check
 
 ## English
 
-TG WS Proxy runs a local MTProto proxy on your phone. It uses the Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) with an Android AES library selection. The Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
+TG-WS Proxy is one app with two independent modules:
+
+- **TG-WS** runs a local MTProto proxy on your phone and Telegram connects to it as a normal proxy. This module needs no VPN. It uses the Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) with an Android AES library selection.
+- **ByeByeDPI** is the native DPI bypass from [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. It defaults to a device-wide system VPN; the second mode is a local SOCKS5 at `127.0.0.1:1080`. Neither mode needs root.
+
+The Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
 
 1. Download `tgwsproxy-*-arm64.apk` from the [latest release](https://github.com/Derigava/tg-ws-proxy-android/releases/latest). It needs Android 7.0+ and ARM64.
-2. Open the app and allow notifications to see the proxy status and stop it from the notification.
-3. Tap the power button and wait for `[OK] CONNECTED`.
+2. Open the app and allow notifications to see the status and stop it from the notification.
+3. Tap the TG-WS power button and wait for `[OK] CONNECTED`.
 4. Tap "Apply in Telegram", choose the client that will receive the proxy secret, and confirm in the client.
+
+The right button starts ByeByeDPI. On first run Android asks for VPN consent; then a notification appears. If another VPN is active, the app offers to replace it (with explicit confirmation), switch to SOCKS5, or cancel. ByeByeDPI does not promise encryption or hide your IP — it makes traffic harder for DPI systems to detect, and no strategy guarantees access to every site on every provider.
 
 Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts. Automation intents for `com.amurcanov.tgwsproxy.ProxyShortcutActivity` require confirmation.
 
