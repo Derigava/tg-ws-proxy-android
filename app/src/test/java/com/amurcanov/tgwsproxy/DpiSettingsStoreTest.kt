@@ -104,4 +104,30 @@ class DpiSettingsStoreTest {
         }
         assertEquals(before, DpiSettingsStore(context).exportJson())
     }
+
+    @Test fun editingStrategyFieldsPersistsAndRevalidates() {
+        store.importJson(fixture)
+        store.updateSettings(mapOf("byedpi_desync_method" to "split", "byedpi_split_position" to "4"))
+        val options = store.connectionOptions()
+        assertTrue(options.args.contains("-s4"))
+        assertFalse(options.args.contains("-o1"))
+        val document = JSONObject(store.exportJson()).getJSONObject("settings")
+        assertEquals("split", document.getString("byedpi_desync_method"))
+    }
+
+    @Test fun editingInvalidStrategyDoesNotOverwriteBackup() {
+        store.importJson(fixture)
+        val before = store.exportJson()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.updateSettings(mapOf("byedpi_desync_method" to "bogus"))
+        }
+        assertEquals(before, store.exportJson())
+    }
+
+    @Test fun editingUnknownSettingIsRejected() {
+        store.importJson(fixture)
+        assertThrows(IllegalArgumentException::class.java) {
+            store.updateSettings(mapOf("secret_key" to "must-not-leak"))
+        }
+    }
 }

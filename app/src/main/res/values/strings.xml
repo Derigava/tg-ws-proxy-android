@@ -190,4 +190,19 @@
     <string name="dpi_backup_imported">Backup saved. The SOCKS5 endpoint and VPN app filter settings take effect at the next start.</string>
     <string name="dpi_backup_exported">Backup exported</string>
     <string name="dpi_backup_error">Could not read or write the ByeByeDPI backup</string>
+    <string name="dpi_strategy_desync">Desync method</string>
+    <string name="dpi_strategy_split">Split</string>
+    <string name="dpi_strategy_split_position">Split position</string>
+    <string name="dpi_strategy_split_at_host">Split at host</string>
+    <string name="dpi_strategy_protocols">Protocols</string>
+    <string name="dpi_strategy_desync_http">HTTP desync</string>
+    <string name="dpi_strategy_desync_https">HTTPS desync</string>
+    <string name="dpi_strategy_desync_udp">UDP desync</string>
+    <string name="dpi_strategy_hosts">Hosts</string>
+    <string name="dpi_strategy_other">Other</string>
+    <string name="dpi_strategy_default_ttl">Default TTL</string>
+    <string name="dpi_strategy_no_domain">No domain</string>
+    <string name="dpi_strategy_tcp_fast_open">TCP Fast Open</string>
+    <string name="dpi_strategy_drop_sack">Drop SACK</string>
+    <string name="dpi_strategy_editor">ByeByeDPI strategy</string>
 </resources>
