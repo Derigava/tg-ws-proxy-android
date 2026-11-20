@@ -222,4 +222,7 @@
     <string name="dpi_strategy_udp">UDP</string>
     <string name="dpi_strategy_udp_fake_count">UDP fake count</string>
     <string name="dpi_strategy_editor">ByeByeDPI strategy</string>
+    <string name="dpi_cmd_use_command_line">Use command line</string>
+    <string name="dpi_cmd_args">Command line</string>
+    <string name="dpi_cmd_args_hint">ciadpi arguments, one per line or space-separated</string>
 </resources>
