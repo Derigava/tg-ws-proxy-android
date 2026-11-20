@@ -15,6 +15,7 @@ import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
 import com.amurcanov.tgwsproxy.ui.BrandSegmented
 import com.amurcanov.tgwsproxy.ui.BrandField
+import com.amurcanov.tgwsproxy.ui.BrandMultilineField
 import com.amurcanov.tgwsproxy.ui.SectionLabel
 import com.amurcanov.tgwsproxy.ui.SwitchRow
 
@@ -44,6 +45,8 @@ internal fun DpiStrategyEditor() {
     var desyncHttps by remember { mutableStateOf(store.bool("byedpi_desync_https", true)) }
     var desyncUdp by remember { mutableStateOf(store.bool("byedpi_desync_udp", true)) }
     var hostsMode by remember { mutableStateOf(store.string("byedpi_hosts_mode", "disable")) }
+    var hostsBlacklist by remember { mutableStateOf(store.string("byedpi_hosts_blacklist", "")) }
+    var hostsWhitelist by remember { mutableStateOf(store.string("byedpi_hosts_whitelist", "")) }
     var defaultTtl by remember { mutableStateOf(store.int("byedpi_default_ttl", 0).toString()) }
     var noDomain by remember { mutableStateOf(store.bool("byedpi_no_domain", false)) }
     var tcpFastOpen by remember { mutableStateOf(store.bool("byedpi_tcp_fast_open", false)) }
@@ -101,6 +104,19 @@ internal fun DpiStrategyEditor() {
             selected = hostsMode,
             onSelect = { hostsMode = it; persist("byedpi_hosts_mode", it) },
         )
+        if (hostsMode == "blacklist") {
+            BrandMultilineField(
+                value = hostsBlacklist,
+                onValueChange = { hostsBlacklist = it; persist("byedpi_hosts_blacklist", it) },
+                placeholder = stringResource(R.string.dpi_strategy_hosts_blacklist),
+            )
+        } else if (hostsMode == "whitelist") {
+            BrandMultilineField(
+                value = hostsWhitelist,
+                onValueChange = { hostsWhitelist = it; persist("byedpi_hosts_whitelist", it) },
+                placeholder = stringResource(R.string.dpi_strategy_hosts_whitelist),
+            )
+        }
 
         SectionLabel(stringResource(R.string.dpi_strategy_other))
         BrandField(
