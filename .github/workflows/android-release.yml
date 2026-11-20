@@ -152,6 +152,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  pr-arm64-apk:
+    if: github.event_name == 'pull_request'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-unsigned-apk
+          path: unsigned
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+      - name: Sign and verify ARM64 test APK
+        env:
+          APK_SHA256: ${{ needs.verify.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          printf '%s  unsigned/app-arm64-unsigned.apk\n' "$APK_SHA256" | sha256sum --check
+          sdkmanager 'build-tools;36.0.0'
+          test_key="$RUNNER_TEMP/tgws-pr-test.p12"
+          keytool -genkeypair -noprompt -keystore "$test_key" -storepass android \
+            -alias tgws-pr-test -dname 'CN=TGWS Pull Request Test' -keyalg RSA -keysize 2048 -validity 365
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          apk="tgwsproxy-pr-test-arm64.apk"
+          "$apksigner" sign --ks "$test_key" --ks-pass pass:android --ks-key-alias tgws-pr-test \
+            --out "$apk" unsigned/app-arm64-unsigned.apk
+          "$apksigner" verify --min-sdk-version 24 --verbose --print-certs -Werr "$apk"
+      - name: Upload installable ARM64 test APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pr-test-apk-arm64
+          path: tgwsproxy-pr-test-arm64.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   android:
     needs: [prepare, verify]
     runs-on: ubuntu-24.04
@@ -162,6 +203,14 @@ jobs:
         include:
           - api: 24
             target: default
+            pages: 4096
+            ram: 2048M
+          - api: 25
+            target: google_apis
+            pages: 4096
+            ram: 2048M
+          - api: 26
+            target: google_apis
             pages: 4096
             ram: 2048M
           - api: 35
