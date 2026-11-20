@@ -94,6 +94,31 @@
             </intent-filter>
         </activity>
 
+        <!-- ByeByeDPI launcher shortcut (no confirmation, like the TG one). -->
+        <activity
+            android:name="com.amurcanov.tgwsproxy.DpiLauncherShortcutActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- ByeByeDPI external automation requires confirmation; VPN is never captured silently. -->
+        <activity
+            android:name="com.amurcanov.tgwsproxy.DpiShortcutActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.START" />
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.STOP" />
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.TOGGLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="com.amurcanov.tgwsproxy.ProxyTilePreferencesActivity"
             android:exported="true"

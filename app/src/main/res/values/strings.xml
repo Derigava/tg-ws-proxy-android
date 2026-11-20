@@ -252,4 +252,7 @@
     <string name="dpi_app_filter_whitelist">Route only selected</string>
     <string name="dpi_change_strategy">Change strategy</string>
     <string name="dpi_change_strategy_empty">No pinned strategies yet</string>
+    <string name="dpi_shortcut_start">Start ByeByeDPI</string>
+    <string name="dpi_shortcut_stop">Stop ByeByeDPI</string>
+    <string name="dpi_shortcut_toggle">Toggle ByeByeDPI</string>
 </resources>

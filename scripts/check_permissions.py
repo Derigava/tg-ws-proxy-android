@@ -119,6 +119,16 @@ def check_components(tree: str, package: str) -> None:
     if any(legacy.intersection(actions) for _, attrs, actions in components if attrs.get("name") != target):
         raise ValueError("Legacy TG actions must not target any other component")
 
+    dpi_legacy = {f"{package}.action.dpi.{action}" for action in ("START", "STOP", "TOGGLE")}
+    dpi_target = "com.amurcanov.tgwsproxy.DpiShortcutActivity"
+    for kind, attrs, actions in components:
+        if kind == "activity" and attrs.get("name") == dpi_target and dpi_legacy <= set(actions):
+            break
+    else:
+        raise ValueError("ByeByeDPI actions must remain on DpiShortcutActivity")
+    if any(dpi_legacy.intersection(actions) for _, attrs, actions in components if attrs.get("name") != dpi_target):
+        raise ValueError("ByeByeDPI actions must not target any other component")
+
 
 def find_aapt2(explicit: str | None = None) -> str:
     candidates: list[str] = []
