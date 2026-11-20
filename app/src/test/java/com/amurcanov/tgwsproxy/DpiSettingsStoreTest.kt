@@ -38,6 +38,18 @@ class DpiSettingsStoreTest {
         assertEquals(listOf("org.example.client"), options.routing.apps)
     }
 
+    @Test fun dnsAcceptsOnlyNumericAddressesOrSystemDefault() {
+        store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"dns_ip\":\"2001:db8::53\""))
+        assertEquals("2001:db8::53", store.connectionOptions().routing.dns)
+        val before = store.exportJson()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importJson(before.replace("2001:db8::53", "dns.example.org"))
+        }
+        assertEquals(before, store.exportJson())
+        store.importJson(before.replace("2001:db8::53", ""))
+        assertEquals("", store.connectionOptions().routing.dns)
+    }
+
     @Test fun invalidImportedEndpointDoesNotOverwriteBackup() {
         store.importJson(fixture)
         val before = store.exportJson()
