@@ -71,6 +71,18 @@ class IntegrityTests(unittest.TestCase):
 
 
 class ApkTests(unittest.TestCase):
+    def test_both_dpi_libraries_required_for_selected_abi(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("lib/x86_64/libbyedpi.so", elf())
+                archive.writestr("lib/arm64-v8a/libhev-socks5-tunnel.so", elf())
+            with self.assertRaisesRegex(ValueError, "libhev-socks5-tunnel"):
+                apk_check.check_dpi_libraries(apk, "x86_64")
+            with zipfile.ZipFile(apk, "a") as archive:
+                archive.writestr("lib/x86_64/libhev-socks5-tunnel.so", elf())
+            self.assertEqual(apk_check.check_dpi_libraries(apk, "x86_64"), 2)
+
     def test_old_4k_native_binary_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "16 KB"):
             apk_check.load_alignments(elf(4096))

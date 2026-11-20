@@ -1,5 +1,3 @@
-import java.io.File
-
 plugins {
     id("com.android.library")
 }
@@ -7,6 +5,7 @@ plugins {
 android {
     namespace = "com.amurcanov.tgwsproxy.dpi"
     compileSdk = 35
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         minSdk = 24
@@ -24,6 +23,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 

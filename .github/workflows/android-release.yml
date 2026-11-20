@@ -76,7 +76,9 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Verify the committed upstream source
         id: upstream
-        run: python scripts/sync_upstream.py --check
+        run: |
+          python scripts/sync_upstream.py --check
+          python scripts/sync_byebyedpi.py --check
       - name: Resolve release metadata
         id: release
         env:
@@ -125,17 +127,19 @@ jobs:
           python -m pip install -r scripts/requirements-test.txt
           python scripts/run_python_tests.py
       - name: Install Android SDK platform and tools
-        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
-      - name: JVM tests and unsigned ARM64 release
+        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: JVM tests, emulator APK, and unsigned ARM64 release
         id: package
         run: |
           java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain \
-            :app:testArm64DebugUnitTest :app:assembleArm64Release \
+            :dpi-runtime:testDebugUnitTest :app:testArm64DebugUnitTest \
+            :app:assembleEmulatorDebug :app:assembleArm64Release \
             -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" \
             -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
           mkdir -p unsigned
           cp app/build/outputs/apk/arm64/release/*-unsigned.apk unsigned/app-arm64-unsigned.apk
           python scripts/check_apk.py unsigned/app-arm64-unsigned.apk
+          python scripts/check_apk.py app/build/outputs/apk/emulator/debug/*-debug.apk --abi x86_64
           AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2" \
             python scripts/check_permissions.py unsigned/app-arm64-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 unsigned/app-arm64-unsigned.apk
