@@ -42,7 +42,7 @@ internal fun DpiStrategyPickerDialog(onDismiss: () -> Unit) {
         store.applyStrategy(command.text)
         val wasRunning = DpiSession.state.value is DpiState.Running || DpiSession.state.value is DpiState.Starting
         if (wasRunning) {
-            DpiSession.stop()
+            DpiSession.stop(context)
             scope.launch {
                 DpiSession.state.first { it is DpiState.Off || it is DpiState.Failed }
                 DpiSession.start(context)

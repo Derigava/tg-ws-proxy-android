@@ -46,7 +46,7 @@ internal fun DpiStrategyList() {
         val wasRunning = DpiSession.state.value is com.amurcanov.tgwsproxy.dpi.DpiState.Running ||
             DpiSession.state.value is com.amurcanov.tgwsproxy.dpi.DpiState.Starting
         if (wasRunning) {
-            DpiSession.stop()
+            DpiSession.stop(context)
             scope.launch {
                 DpiSession.state.first { it is com.amurcanov.tgwsproxy.dpi.DpiState.Off || it is com.amurcanov.tgwsproxy.dpi.DpiState.Failed }
                 DpiSession.start(context)

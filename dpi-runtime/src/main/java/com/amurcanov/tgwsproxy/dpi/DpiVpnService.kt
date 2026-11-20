@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.ResultReceiver
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import io.github.romanvht.byedpi.core.ByeDpiProxy
@@ -48,6 +49,9 @@ class DpiVpnService : VpnService() {
     companion object {
         const val ACTION_START = "io.github.derigava.tgwsproxy.dpi.vpn.START"
         const val ACTION_STOP = "io.github.derigava.tgwsproxy.dpi.vpn.STOP"
+        const val ACTION_CANCEL = "io.github.derigava.tgwsproxy.dpi.vpn.CANCEL"
+        const val EXTRA_ATTEMPT_ID = "EXTRA_ATTEMPT_ID"
+        const val EXTRA_DEADLINE = "EXTRA_DEADLINE"
         const val EXTRA_ARGS = "EXTRA_ARGS"
         const val EXTRA_HOST = "EXTRA_HOST"
         const val EXTRA_PORT = "EXTRA_PORT"
@@ -63,7 +67,9 @@ class DpiVpnService : VpnService() {
         const val RESULT_SESSION = 3
         const val RESULT_STARTED = 1
         const val RESULT_FAILED = 2
-        const val START_TIMEOUT_MS = 10_000L
+        const val RESULT_STOPPED = 4
+        const val START_TIMEOUT_MS = 20_000L
+        const val STOP_TIMEOUT_MS = 6_000L
 
         private const val PROBE_TIMEOUT_MS = 250
         private const val POLL_MS = 50L
@@ -74,6 +80,16 @@ class DpiVpnService : VpnService() {
 
     private val proxy by lazy { ByeDpiProxy() }
     private val sessionBinder = Binder()
+    private val statusBinder by lazy { DpiRemoteSession.statusBinder({ endpoint to tunnelReady }) { stop() } }
+    @Volatile
+    private var endpoint: String? = null
+
+    @Volatile
+    private var tunnelReady = false
+    private val lifecycleLock = Any()
+
+    @Volatile
+    private var activeAttemptId: String? = null
     private var engineThread: Thread? = null
     private var tunnelThread: Thread? = null
     private var tunFd: ParcelFileDescriptor? = null
@@ -109,6 +125,7 @@ class DpiVpnService : VpnService() {
         when (intent?.action) {
             ACTION_START -> start(intent)
             ACTION_STOP -> stop()
+            ACTION_CANCEL -> cancel(intent, startId)
             else -> stopSelfResult(startId)
         }
         // No automatic restart: a VPN that the user (or system) stopped must
@@ -118,7 +135,19 @@ class DpiVpnService : VpnService() {
 
     @Suppress("DEPRECATION")
     private fun start(intent: Intent) {
-        if (engineThread != null || tunFd != null) return
+        val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
+        if (stopping || activeAttemptId != null) {
+            report(receiver, "VPN is already active")
+            return
+        }
+        val id = intent.getStringExtra(EXTRA_ATTEMPT_ID)
+        val deadline = intent.getLongExtra(EXTRA_DEADLINE, 0L)
+        if (id == null || deadline <= SystemClock.elapsedRealtime()) {
+            report(receiver, "VPN startup deadline expired")
+            stopSelf()
+            return
+        }
+        val attempt = VpnStartAttempt(id, deadline)
         val args = intent.getStringArrayListExtra(EXTRA_ARGS)?.toTypedArray()
         val host = intent.getStringExtra(EXTRA_HOST) ?: "127.0.0.1"
         val port = intent.getIntExtra(EXTRA_PORT, 1080)
@@ -130,7 +159,6 @@ class DpiVpnService : VpnService() {
             }.getOrDefault(VpnAppListMode.ALL_APPS),
             apps = intent.getStringArrayListExtra(EXTRA_APPS)?.toList().orEmpty(),
         )
-        val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
         val replacement = intent.getStringExtra(EXTRA_REPLACEMENT_SLOT)?.let { slotName ->
             runCatching {
                 VpnReplacement(
@@ -145,6 +173,8 @@ class DpiVpnService : VpnService() {
             return
         }
 
+        endpoint = dpiEndpoint(host, port)
+        activeAttemptId = attempt.id
         stopping = false
         ready = false
         engineError = null
@@ -165,8 +195,7 @@ class DpiVpnService : VpnService() {
         }
 
         thread(name = "ByeDPIVpnMonitor") {
-            val deadline = System.currentTimeMillis() + START_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadline) {
+            while (!stopping && attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
                 val error = engineError
                 if (error != null) {
                     report(receiver, error)
@@ -175,11 +204,12 @@ class DpiVpnService : VpnService() {
                 }
                 if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
                     ready = true
-                    startTunnel(receiver, routing, host, port, replacement)
+                    startTunnel(attempt, receiver, routing, host, port, replacement)
                     return@thread
                 }
                 Thread.sleep(POLL_MS)
             }
+            if (stopping) return@thread
             report(receiver, "VPN engine not ready on $host:$port")
             runCatching { proxy.stopProxy() }
             terminate()
@@ -188,6 +218,7 @@ class DpiVpnService : VpnService() {
 
     /** Re-checks authorization immediately before establishing, then starts the HEV tunnel. */
     private fun startTunnel(
+        attempt: VpnStartAttempt,
         receiver: ResultReceiver?,
         routing: DpiVpnRouting,
         host: String,
@@ -208,8 +239,6 @@ class DpiVpnService : VpnService() {
                 return
             }
 
-            val fd = establish(routing)
-            tunFd = fd
             val tunnelConfig = buildString {
                 appendLine("tunnel:")
                 appendLine("  mtu: 8500")
@@ -220,25 +249,39 @@ class DpiVpnService : VpnService() {
                 appendLine("  port: $port")
                 appendLine("  udp: udp")
             }
-            tunnelThread = thread(name = "HEV") {
-                // startTunnel blocks in the native event loop until stopTunnel;
-                // a return without an explicit stop is a native failure/early
-                // exit, which must end the session so Running is never stale.
-                val code = TProxyService.startTunnel(tunnelConfig, fd.fd)
-                if (!stopping) {
-                    Log.w(TAG, "HEV tunnel exited without stop (code $code)")
-                    report(receiver, "HEV tunnel exited (code $code)")
-                    terminate()
+            synchronized(lifecycleLock) {
+                if (stopping) return
+                check(attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
+                    "VPN startup deadline expired"
+                }
+                val fd = establish(routing)
+                tunFd = fd
+                tunnelThread = thread(name = "HEV") {
+                    // startTunnel blocks in the native event loop until stopTunnel;
+                    // a return without an explicit stop is a native failure/early
+                    // exit, which must end the session so Running is never stale.
+                    val code = TProxyService.startTunnel(tunnelConfig, fd.fd)
+                    if (!stopping) {
+                        Log.w(TAG, "HEV tunnel exited without stop (code $code)")
+                        report(receiver, "HEV tunnel exited (code $code)")
+                        terminate()
+                    }
                 }
             }
             // Wait for the genuine native-ready signal (hev_socks5_tunnel_run
             // reached, i.e. the event loop is about to run) — not thread
             // liveness. Thread death before ready is an early failure.
-            val deadline = System.currentTimeMillis() + START_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadline && !stopping) {
+            while (!stopping && attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
                 if (HevNative.isReady() != 0) {
-                    receiver?.send(RESULT_STARTED, Bundle())
-                    return
+                    synchronized(lifecycleLock) {
+                        if (stopping) return
+                        if (attempt.canStartTunnel(SystemClock.elapsedRealtime(), activeAttemptId)) {
+                            tunnelReady = true
+                            receiver?.send(RESULT_STARTED, Bundle())
+                            return
+                        }
+                    }
+                    break
                 }
                 if (tunnelThread?.isAlive != true) {
                     report(receiver, "HEV tunnel exited before ready")
@@ -247,8 +290,10 @@ class DpiVpnService : VpnService() {
                 }
                 Thread.sleep(POLL_MS)
             }
-            report(receiver, "HEV tunnel not ready")
-            terminate()
+            if (!stopping) {
+                report(receiver, "HEV tunnel not ready")
+                terminate()
+            }
         } catch (e: Throwable) {
             Log.e(TAG, "VPN tunnel failed", e)
             report(receiver, "VPN tunnel failed: ${e.message ?: e.javaClass.simpleName}")
@@ -297,8 +342,24 @@ class DpiVpnService : VpnService() {
         return builder.establish() ?: throw IllegalStateException("VPN connection failed")
     }
 
-    private fun stop() {
-        stopping = true
+    @Suppress("DEPRECATION")
+    private fun cancel(intent: Intent, startId: Int) {
+        val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
+        val id = intent.getStringExtra(EXTRA_ATTEMPT_ID)
+        if (id != null && id == activeAttemptId) {
+            stop(receiver)
+        } else {
+            receiver?.send(RESULT_STOPPED, Bundle())
+            if (activeAttemptId == null) stopSelfResult(startId)
+        }
+    }
+
+    private fun stop(receiver: ResultReceiver? = null) {
+        synchronized(lifecycleLock) {
+            if (stopping) return
+            stopping = true
+            endpoint = null
+        }
         // Native stop ordering mirrors upstream NativeSession: stop the tunnel
         // (stop reading TUN) first, then the SOCKS5 engine, then join both
         // threads, then close the TUN fd, then terminate the :vpn process.
@@ -310,23 +371,19 @@ class DpiVpnService : VpnService() {
         engineThread = null
         runCatching { tunFd?.close() }
         tunFd = null
+        receiver?.send(RESULT_STOPPED, Bundle())
         terminate()
     }
 
     /** The system revoked the VPN (or consent was withdrawn): stop, do not restart. */
     override fun onRevoke() {
         Log.w(TAG, "VPN revoked; stopping without restart")
-        runCatching { TProxyService.stopTunnel() }
-        runCatching { proxy.stopProxy() }
-        runCatching { tunFd?.close() }
-        tunFd = null
-        terminate()
+        stop()
     }
 
     override fun onDestroy() {
+        if (endpoint != null) stop()
         super.onDestroy()
-        runCatching { TProxyService.stopTunnel() }
-        runCatching { proxy.stopProxy() }
     }
 
     private fun socks5Ready(host: String, port: Int): Boolean = try {
@@ -394,5 +451,6 @@ class DpiVpnService : VpnService() {
             .build()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
+    override fun onBind(intent: Intent?): IBinder? =
+        if (intent?.action == DpiRemoteSession.ACTION_STATUS) statusBinder else super.onBind(intent)
 }

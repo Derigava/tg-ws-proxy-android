@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Receives boot broadcasts and starts each module only when its own saved
@@ -61,10 +62,12 @@ class BootReceiver : BroadcastReceiver() {
      * the VPN slot, so this is safe to run at boot; VPN autostart is deliberately
      * not offered here.
      */
-    private fun startDpiSocks5(appContext: Context) {
-        DpiSession.switchMode(appContext, DpiMode.SOCKS5)
-        DpiSession.start(appContext)
-        Log.i(TAG, "Boot completed, DPI SOCKS5 autostart requested via DpiSession")
+    private suspend fun startDpiSocks5(appContext: Context) = withContext(Dispatchers.Main.immediate) {
+        DpiSession.awaitRestoration(appContext)
+        if (DpiSession.switchMode(appContext, DpiMode.SOCKS5)) {
+            DpiSession.start(appContext)
+            Log.i(TAG, "Boot completed, DPI SOCKS5 autostart requested via DpiSession")
+        }
     }
 
     companion object {

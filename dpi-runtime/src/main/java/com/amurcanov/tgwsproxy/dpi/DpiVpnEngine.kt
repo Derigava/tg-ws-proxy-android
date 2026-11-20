@@ -7,6 +7,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ResultReceiver
+import android.os.SystemClock
+import java.util.UUID
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -51,6 +53,7 @@ class DpiVpnEngine(
         }
 
         val myGeneration = ++generation
+        val attempt = VpnStartAttempt(UUID.randomUUID().toString(), SystemClock.elapsedRealtime() + DpiVpnService.START_TIMEOUT_MS)
         val argv = config.toArgv()
         val routing = config.vpnRouting ?: this.routing
         val session = StartSession(myGeneration)
@@ -70,6 +73,8 @@ class DpiVpnEngine(
             context,
             Intent(context, DpiVpnService::class.java)
                 .setAction(DpiVpnService.ACTION_START)
+                .putExtra(DpiVpnService.EXTRA_ATTEMPT_ID, attempt.id)
+                .putExtra(DpiVpnService.EXTRA_DEADLINE, attempt.deadline)
                 .putStringArrayListExtra(DpiVpnService.EXTRA_ARGS, ArrayList(argv.toList()))
                 .putExtra(DpiVpnService.EXTRA_HOST, config.normalizedHost)
                 .putExtra(DpiVpnService.EXTRA_PORT, config.port)
@@ -84,18 +89,36 @@ class DpiVpnEngine(
         // Consume the proof only after it has been serialized into the intent.
         replacement = null
         return runBlocking {
-            withTimeoutOrNull(DpiVpnService.START_TIMEOUT_MS) { session.acknowledged.await() }
-        } ?: DpiEngineResult.Failed("VPN not ready on ${config.normalizedHost}:${config.port}")
+            attempt.await(session.acknowledged, SystemClock::elapsedRealtime) { id ->
+                generation++
+                cancelAndConfirm(id, session.exited)
+            }
+        }
+    }
+
+    private suspend fun cancelAndConfirm(id: String, exited: CompletableDeferred<Unit>): Boolean {
+        val stopped = object : ResultReceiver(mainHandler) {
+            override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                if (resultCode == DpiVpnService.RESULT_STOPPED) exited.complete(Unit)
+            }
+        }
+        runCatching {
+            context.startService(
+                Intent(context, DpiVpnService::class.java)
+                    .setAction(DpiVpnService.ACTION_CANCEL)
+                    .putExtra(DpiVpnService.EXTRA_ATTEMPT_ID, id)
+                    .putExtra(DpiVpnService.EXTRA_RESULT_RECEIVER, stopped)
+            )
+        }
+        return withTimeoutOrNull(DpiVpnService.STOP_TIMEOUT_MS) { exited.await(); true } ?: false
     }
 
     override fun stop() {
         // Invalidate the current session before ending it, so its death cannot
         // fire onExit and a stale exit cannot leak into the next session.
         generation++
-        runCatching {
-            context.startService(
-                Intent(context, DpiVpnService::class.java).setAction(DpiVpnService.ACTION_STOP)
-            )
+        check(runBlocking { DpiRemoteSession.stopExisting(context, DpiMode.VPN) }) {
+            "DPI stop could not be confirmed"
         }
     }
 
@@ -122,11 +145,13 @@ class DpiVpnEngine(
      */
     private inner class StartSession(private val myGeneration: Int) {
         val acknowledged = CompletableDeferred<DpiEngineResult>()
+        val exited = CompletableDeferred<Unit>()
         private var deathRecorded = false
         private var ready = false
 
         private val deathRecipient = IBinder.DeathRecipient {
             mainHandler.post {
+                exited.complete(Unit)
                 if (myGeneration == generation) onDeath()
             }
         }
@@ -139,6 +164,7 @@ class DpiVpnEngine(
             try {
                 binder.linkToDeath(deathRecipient, 0)
             } catch (e: Exception) {
+                exited.complete(Unit)
                 deathRecorded = true
             }
         }

@@ -5,6 +5,7 @@ import com.amurcanov.tgwsproxy.dpi.AndroidVpnSlotSampler
 import com.amurcanov.tgwsproxy.dpi.DpiConfig
 import com.amurcanov.tgwsproxy.dpi.DpiController
 import com.amurcanov.tgwsproxy.dpi.DpiEngine
+import com.amurcanov.tgwsproxy.dpi.DpiRemoteSession
 import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
@@ -13,6 +14,11 @@ import com.amurcanov.tgwsproxy.dpi.NativeDpiEngine
 import com.amurcanov.tgwsproxy.dpi.VpnAuthorizer
 import com.amurcanov.tgwsproxy.dpi.VpnReplacement
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -21,6 +27,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+internal val DpiSession = DpiSessionHolder()
 
 /**
  * Process-wide holder for the ByeByeDPI module: one [DpiController] for the
@@ -39,7 +47,7 @@ import kotlinx.coroutines.launch
  * engine for the single start attempt. A proof is minted by the UI only after a
  * visible offer is decided, and reused only if the fresh re-check still matches.
  */
-object DpiSession {
+internal class DpiSessionHolder {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -49,18 +57,19 @@ object DpiSession {
     private val _state = MutableStateFlow<DpiState>(DpiState.Off)
     val state: StateFlow<DpiState> = _state.asStateFlow()
 
-    @Volatile
     private var controller: DpiController? = null
 
-    @Volatile
     private var engine: DpiEngine? = null
 
     private var stateJob: Job? = null
+    private var restoration: Job? = null
+    private var stopBeforeRestoration: Job? = null
+    private var commandVersion = 0L
     private val journal = MutableStateFlow<List<LogEntry>>(emptyList())
-    internal val logs = journal.asStateFlow()
+    val logs = journal.asStateFlow()
     private var nextLogId = 0L
 
-    internal fun clearLogs() { journal.value = emptyList() }
+    fun clearLogs() { journal.value = emptyList() }
 
     private fun journalState(context: Context, state: DpiState) {
         val label = when (state) {
@@ -89,7 +98,8 @@ object DpiSession {
 
     /** Switches mode only while Off; rejects (and reports) otherwise. */
     fun switchMode(context: Context, newMode: DpiMode): Boolean {
-        val current = controller?.state?.value ?: DpiState.Off
+        initialize(context)
+        val current = controller?.state?.value ?: return false
         if (current !is DpiState.Off && current !is DpiState.Failed) return false
         if (newMode == _mode.value) return true
         _mode.value = newMode
@@ -103,8 +113,18 @@ object DpiSession {
      * engine's own authorize-then-establish re-check.
      */
     fun start(context: Context, replacement: VpnReplacement? = null) {
-        ensure(context.applicationContext)
-        val activeController = controller ?: return
+        if (stopBeforeRestoration?.isActive == true) return
+        initialize(context)
+        if (controller == null) {
+            val pending = restoration ?: return
+            val version = commandVersion
+            scope.launch {
+                pending.join()
+                if (commandVersion == version && controller != null) start(context, replacement)
+            }
+            return
+        }
+        val activeController = checkNotNull(controller)
         val current = activeController.state.value
         if (current !is DpiState.Off && current !is DpiState.Failed) return
         val options = try {
@@ -124,15 +144,61 @@ object DpiSession {
         activeController.start(DpiConfig(_mode.value, options.host, options.port, args = options.args, vpnRouting = options.routing))
     }
 
-    fun stop() {
-        controller?.stop()
+    fun stop(context: Context) {
+        commandVersion++
+        controller?.let {
+            it.stop()
+            return
+        }
+        if (stopBeforeRestoration?.isActive == true) return
+        val appContext = context.applicationContext
+        val pending = restoration
+        _state.value = DpiState.Stopping
+        stopBeforeRestoration = scope.launch {
+            pending?.cancelAndJoin()
+            restoration = null
+            val stopped = coroutineScope {
+                DpiMode.entries.map { mode ->
+                    async { runCatching { DpiRemoteSession.stopExisting(appContext, mode) }.getOrDefault(false) }
+                }.map { it.await() }.all { it }
+            }
+            rebuild(appContext)
+            if (!stopped) _state.value = DpiState.Failed("DPI stop could not be confirmed")
+        }
     }
 
-    private fun ensure(context: Context) {
-        if (controller == null) rebuild(context)
+    fun initialize(context: Context) {
+        if (controller != null || restoration != null || stopBeforeRestoration?.isActive == true) return
+        val appContext = context.applicationContext
+        _state.value = DpiState.Starting
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            val remote = coroutineScope {
+                val vpn = async { DpiRemoteSession.inspect(appContext, DpiMode.VPN) }
+                val socks5 = async { DpiRemoteSession.inspect(appContext, DpiMode.SOCKS5) }
+                vpn.await() ?: socks5.await()
+            }
+            var active = remote
+            if (remote != null) {
+                _mode.value = remote.mode
+                _endpoint.value = remote.endpoint
+                while (active != null && !active.ready) {
+                    delay(100)
+                    active = DpiRemoteSession.inspect(appContext, remote.mode)
+                }
+            }
+            rebuild(appContext, active)
+        }
+        restoration = job
+        job.start()
     }
 
-    private fun rebuild(context: Context) {
+    suspend fun awaitRestoration(context: Context) {
+        initialize(context)
+        restoration?.join()
+        stopBeforeRestoration?.join()
+    }
+
+    private fun rebuild(context: Context, active: DpiRemoteSession? = null) {
         stateJob?.cancel()
         val newEngine: DpiEngine = when (_mode.value) {
             DpiMode.VPN -> DpiVpnEngine(context, VpnAuthorizer(AndroidVpnSlotSampler(context)))
@@ -141,7 +207,8 @@ object DpiSession {
         val newController = DpiController(newEngine)
         engine = newEngine
         controller = newController
-        _state.value = DpiState.Off
+        if (active != null) newController.restoreRunning(active.mode, active::watchExit)
+        _endpoint.value = active?.endpoint
         stateJob = scope.launch {
             newController.state.collect { state ->
                 if (state != _state.value) journalState(context, state)

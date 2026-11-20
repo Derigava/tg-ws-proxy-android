@@ -67,10 +67,8 @@ class NativeDpiEngine(private val context: Context) : DpiEngine {
         // Invalidate the current session before ending it, so its death cannot
         // fire onExit and a stale exit cannot leak into the next session.
         generation++
-        runCatching {
-            context.startService(
-                Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_STOP)
-            )
+        check(runBlocking { DpiRemoteSession.stopExisting(context, DpiMode.SOCKS5) }) {
+            "DPI stop could not be confirmed"
         }
     }
 

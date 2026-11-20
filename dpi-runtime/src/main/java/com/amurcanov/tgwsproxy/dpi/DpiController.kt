@@ -48,6 +48,21 @@ class DpiController internal constructor(
 
     private var startAttempt = 0L
 
+    /** Attaches to a listener already confirmed by the remote service. */
+    fun restoreRunning(mode: DpiMode, watchExit: (() -> Unit) -> Boolean) {
+        synchronized(stateLock) {
+            check(_state.value == DpiState.Off)
+            val attempt = ++startAttempt
+            val watching = watchExit {
+                synchronized(stateLock) {
+                    if (startAttempt == attempt && _state.value is DpiState.Running) onEngineExit()
+                }
+            }
+            _state.value = if (watching) DpiState.Running(mode)
+            else DpiState.Failed("engine exited during restoration")
+        }
+    }
+
     fun start(config: DpiConfig) {
         val attempt = synchronized(stateLock) {
             val current = _state.value
@@ -96,10 +111,15 @@ class DpiController internal constructor(
         }
         scope.launch {
             mutex.withLock {
-                runCatching { engine.stop() }
+                val result = runCatching { engine.stop() }
                 synchronized(stateLock) {
                     // Do not clobber a start that superseded this stop.
-                    if (_state.value is DpiState.Stopping) _state.value = DpiState.Off
+                    if (_state.value is DpiState.Stopping) {
+                        _state.value = result.fold(
+                            onSuccess = { DpiState.Off },
+                            onFailure = { DpiState.Failed(it.message ?: "engine stop failed") },
+                        )
+                    }
                 }
             }
         }
