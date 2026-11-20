@@ -58,6 +58,12 @@ def validate_runtime(observations: list[frozenset[int]], activities: str,
         raise ValueError("Release launcher activity did not remain resumed")
 
 
+def validate_no_vpn_started(services: str, package: str) -> None:
+    component = re.escape(package) + r"/(?:com\.amurcanov\.tgwsproxy)?\.dpi\.DpiVpnService"
+    if re.search(rf"(?m)^\s*\*\s+ServiceRecord\{{[^\n]*?\s{component}(?=[\s}}])", services):
+        raise ValueError("ByeByeDPI VPN started without an explicit user request")
+
+
 def has_resumed_activity(activities: str, package: str) -> bool:
     return any(re.search("resumedactivity", line, re.IGNORECASE) and
                re.search(re.escape(package) + r"/", line) for line in activities.splitlines())
@@ -134,6 +140,8 @@ def main() -> None:
                 raise ValueError("Release crashed or became unresponsive during startup")
             pids = parse_pids(adb("shell", "pidof", args.package, check=False, timeout=15).stdout)
             activity_state = adb("shell", "dumpsys", "activity", "activities", timeout=15).stdout
+            services = adb("shell", "dumpsys", "activity", "services", args.package, timeout=15).stdout
+            validate_no_vpn_started(services, args.package)
             return pids, activity_state
 
         # Startup may be slow on loaded CI hosts. Do not mistake a pending first
