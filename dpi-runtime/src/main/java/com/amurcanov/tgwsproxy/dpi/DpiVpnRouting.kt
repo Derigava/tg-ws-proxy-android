@@ -20,3 +20,24 @@ data class DpiVpnRouting(
     val appListMode: VpnAppListMode = VpnAppListMode.ALL_APPS,
     val apps: List<String> = emptyList(),
 )
+
+/** Android's VPN builder only permits one kind of application list per tunnel. */
+internal fun applyVpnApplicationRules(
+    routing: DpiVpnRouting,
+    hostPackage: String,
+    addAllowed: (String) -> Boolean,
+    addDisallowed: (String) -> Unit,
+) {
+    val selected = routing.apps.distinct().filterNot { it == hostPackage }
+    when (routing.appListMode) {
+        VpnAppListMode.ALL_APPS -> addDisallowed(hostPackage)
+        VpnAppListMode.BLACKLIST -> {
+            addDisallowed(hostPackage)
+            selected.forEach(addDisallowed)
+        }
+        VpnAppListMode.WHITELIST -> {
+            val installed = selected.count(addAllowed)
+            require(installed > 0) { "VPN allowlist has no installed applications" }
+        }
+    }
+}
