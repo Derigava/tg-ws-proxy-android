@@ -112,6 +112,18 @@ class DualModuleControlsTest {
     }
 
     @Test
+    fun strategyEditorReadsStringTypedNumbersFromImport() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = com.amurcanov.tgwsproxy.dpi.DpiSettingsStore(context)
+        // v1.8.2 exchange documents store numeric settings as JSON strings.
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_enable_cmd_settings":false,"byedpi_split_position":"7"}}""")
+        composeRule.setContent {
+            TgWsProxyTheme { com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyEditor() }
+        }
+        composeRule.onNodeWithText("7").assertExists()
+    }
+
+    @Test
     fun strategyEditorPersistsDesyncMethodChoice() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = com.amurcanov.tgwsproxy.dpi.DpiSettingsStore(context)

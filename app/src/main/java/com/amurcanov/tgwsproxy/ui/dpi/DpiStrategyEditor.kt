@@ -26,7 +26,7 @@ private fun DpiSettingsStore.bool(key: String, default: Boolean) =
     (currentSettings()[key] as? Boolean) ?: default
 
 private fun DpiSettingsStore.int(key: String, default: Int) =
-    ((currentSettings()[key] as? Number)?.toInt()) ?: default
+    currentSettings()[key]?.toString()?.toIntOrNull() ?: default
 
 /**
  * Standard desync strategy editor (parity rows U-01..U-26). Each edit is
