@@ -10,6 +10,7 @@ data class DpiConfig(
     val host: String = "127.0.0.1",
     val port: Int = 1080,
     val args: List<String> = emptyList(),
+    val vpnRouting: DpiVpnRouting? = null,
 ) {
     /** True only for loopback (or a wildcard we coerce to loopback) addresses. */
     val isLoopback: Boolean
