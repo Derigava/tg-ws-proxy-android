@@ -239,4 +239,10 @@
     <string name="dpi_diag_args">Аргументы</string>
     <string name="dpi_diag_ipv6">IPv6</string>
     <string name="dpi_diag_apps">Фильтр приложений</string>
+    <string name="dpi_domain_lists_title">Списки доменов</string>
+    <string name="dpi_domain_lists_empty">Списков доменов нет</string>
+    <string name="dpi_domain_list_add">Добавить список</string>
+    <string name="dpi_domain_list_name">Имя списка</string>
+    <string name="dpi_domain_list_domains_hint">По одному домену в строке</string>
+    <string name="dpi_domain_list_save">Сохранить список</string>
 </resources>

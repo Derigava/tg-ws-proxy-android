@@ -240,4 +240,10 @@
     <string name="dpi_diag_args">Arguments</string>
     <string name="dpi_diag_ipv6">IPv6</string>
     <string name="dpi_diag_apps">App filter</string>
+    <string name="dpi_domain_lists_title">Domain lists</string>
+    <string name="dpi_domain_lists_empty">No domain lists</string>
+    <string name="dpi_domain_list_add">Add list</string>
+    <string name="dpi_domain_list_name">List name</string>
+    <string name="dpi_domain_list_domains_hint">One domain per line</string>
+    <string name="dpi_domain_list_save">Save list</string>
 </resources>
