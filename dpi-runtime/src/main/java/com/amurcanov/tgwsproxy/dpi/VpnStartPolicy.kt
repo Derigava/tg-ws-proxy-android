@@ -9,34 +9,35 @@ package com.amurcanov.tgwsproxy.dpi
  */
 enum class VpnSlotState { FREE, OURS, THIRD_PARTY, UNKNOWN }
 
-/** User consent to take over the system VPN slot. */
-enum class VpnConsent {
-    /** No consent has been given yet. */
-    NONE,
-
-    /** The user explicitly consented (and that consent is still valid). */
-    GRANTED,
-
-    /** Consent was granted but has since been revoked or expired. */
-    LOST,
-}
-
 /** Conservative refusal reasons. */
 enum class VpnRefuseReason {
-    /** The system VPN permission has not been obtained yet. */
+    /** The system VPN permission has not been obtained (prepare() still returns an intent). */
     CONSENT_NOT_GRANTED,
 
-    /** A previously granted consent was lost. */
+    /** Authorization was present at decision time but was lost before establish. */
     CONSENT_LOST,
 
     /** Always-on VPN or lockdown is active; we must not capture the slot. */
     LOCKDOWN,
+
+    /** The VPN slot changed between decision and establish (active/unknown VPN appeared). */
+    SLOT_CHANGED,
 }
 
-/** A single, immutable snapshot the VPN policy decides on. */
+/**
+ * A single, immutable snapshot the VPN policy decides on.
+ *
+ * Two orthogonal facts drive the decision, and they must not be conflated:
+ *  * [prepared] — the ambient OS grant (`VpnService.prepare()` returned null).
+ *    This is a cached, user-level permission to use the VPN at all; it says
+ *    nothing about whether the user agreed to replace *this* active VPN.
+ *  * [replaceAuthorized] — a per-attempt, explicit authorization the user gave
+ *    right now to replace the specific third-party VPN occupying the slot.
+ */
 data class VpnStartRequest(
     val slot: VpnSlotState,
-    val consent: VpnConsent,
+    val prepared: Boolean,
+    val replaceAuthorized: Boolean,
     val lockdown: Boolean = false,
 )
 
@@ -67,44 +68,33 @@ object VpnStartPolicy {
     /**
      * The conservative decision table:
      *
-     * | slot         | consent | lockdown | decision                      |
-     * |--------------|---------|----------|-------------------------------|
-     * | FREE         | GRANTED | false    | Start                         |
-     * | FREE         | NONE    | false    | Refuse(CONSENT_NOT_GRANTED)   |
-     * | FREE         | LOST    | false    | Refuse(CONSENT_LOST)          |
-     * | OURS         | GRANTED | false    | Start                         |
-     * | THIRD_PARTY  | GRANTED | false    | Start (explicit consent given)|
-     * | THIRD_PARTY  | NONE    | false    | Offer(ownerUncertain=false)   |
-     * | THIRD_PARTY  | LOST    | false    | Refuse(CONSENT_LOST)          |
-     * | UNKNOWN      | GRANTED | false    | Offer(ownerUncertain=true)    |
-     * | UNKNOWN      | NONE    | false    | Offer(ownerUncertain=true)    |
-     * | any          | LOST    | false    | Refuse(CONSENT_LOST)          |
-     * | any          | any     | true     | Refuse(LOCKDOWN)              |
+     * | slot        | prepared | replaceAuthorized | lockdown | decision                        |
+     * |-------------|----------|-------------------|----------|---------------------------------|
+     * | FREE        | true     | -                 | false    | Start                           |
+     * | FREE        | false    | -                 | false    | Refuse(CONSENT_NOT_GRANTED)     |
+     * | OURS        | true     | -                 | false    | Start                           |
+     * | OURS        | false    | -                 | false    | Refuse(CONSENT_NOT_GRANTED)     |
+     * | THIRD_PARTY | -        | true              | false    | Start (explicit replacement)    |
+     * | THIRD_PARTY | -        | false             | false    | Offer(ownerUncertain=false)     |
+     * | UNKNOWN     | -        | -                 | false    | Offer(ownerUncertain=true)      |
+     * | any         | -        | -                 | true     | Refuse(LOCKDOWN)                |
      *
-     * Loss of consent is a hard block regardless of slot: a consent that was
-     * granted then revoked must never authorize a start. UNKNOWN is never an
-     * automatic start even with GRANTED consent: the owner cannot be verified,
-     * so the caller must present a conservative warning (Offer) and require a
-     * fresh explicit confirmation.
+     * A cached OS grant ([prepared]) never authorizes replacing a third-party
+     * VPN — only an explicit, per-attempt [replaceAuthorized] does. UNKNOWN is
+     * never an automatic start: the owner cannot be verified, so the caller
+     * must present a conservative warning and require a fresh confirmation.
      */
     fun decide(request: VpnStartRequest): VpnStartDecision {
         if (request.lockdown) return VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN)
-        if (request.consent == VpnConsent.LOST) {
-            return VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_LOST)
-        }
 
         return when (request.slot) {
             VpnSlotState.UNKNOWN -> VpnStartDecision.Offer(ownerUncertain = true)
-            VpnSlotState.THIRD_PARTY -> when (request.consent) {
-                VpnConsent.GRANTED -> VpnStartDecision.Start
-                VpnConsent.NONE -> VpnStartDecision.Offer(ownerUncertain = false)
-                VpnConsent.LOST -> VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_LOST)
-            }
-            VpnSlotState.FREE, VpnSlotState.OURS -> when (request.consent) {
-                VpnConsent.GRANTED -> VpnStartDecision.Start
-                VpnConsent.NONE -> VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)
-                VpnConsent.LOST -> VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_LOST)
-            }
+            VpnSlotState.THIRD_PARTY ->
+                if (request.replaceAuthorized) VpnStartDecision.Start
+                else VpnStartDecision.Offer(ownerUncertain = false)
+            VpnSlotState.FREE, VpnSlotState.OURS ->
+                if (request.prepared) VpnStartDecision.Start
+                else VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)
         }
     }
 }

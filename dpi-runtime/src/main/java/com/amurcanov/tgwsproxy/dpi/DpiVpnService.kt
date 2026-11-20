@@ -4,18 +4,18 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
+import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import android.os.ResultReceiver
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import io.github.romanvht.byedpi.core.ByeDpiProxy
 import io.github.romanvht.byedpi.core.TProxyService
 import java.io.IOException
@@ -37,11 +37,12 @@ import kotlin.concurrent.thread
  *    consent can never enter a restart loop.
  *
  * Commands are private (service not exported) and use a namespace distinct
- * from the Telegram proxy and the SOCKS5 [DpiProxyService]. This service does
- * not make the [VpnStartPolicy] decision itself: the caller must sample the
- * slot and call [VpnStartPolicy.decide] — and re-check it immediately before
- * this service is started — so an unauthorized start is refused at the
- * boundary, not here.
+ * from the Telegram proxy and the SOCKS5 [DpiProxyService]. The service never
+ * trusts a start intent: it re-samples the slot and re-runs [VpnStartPolicy.decide]
+ * immediately before [establish], so a raw (in-app) start intent cannot bypass
+ * an authorization that is no longer valid. A stop/revoke kills the `:vpn`
+ * process only, so the pinned engine's sticky native globals are reset without
+ * ever touching the Telegram process.
  */
 class DpiVpnService : VpnService() {
     companion object {
@@ -54,8 +55,11 @@ class DpiVpnService : VpnService() {
         const val EXTRA_IPV6 = "EXTRA_IPV6"
         const val EXTRA_APP_LIST_MODE = "EXTRA_APP_LIST_MODE"
         const val EXTRA_APPS = "EXTRA_APPS"
+        const val EXTRA_REPLACE_AUTHORIZED = "EXTRA_REPLACE_AUTHORIZED"
         const val EXTRA_RESULT_RECEIVER = "EXTRA_RESULT_RECEIVER"
+        const val EXTRA_BINDER = "EXTRA_BINDER"
         const val EXTRA_ERROR = "EXTRA_ERROR"
+        const val RESULT_SESSION = 3
         const val RESULT_STARTED = 1
         const val RESULT_FAILED = 2
         const val START_TIMEOUT_MS = 10_000L
@@ -65,37 +69,10 @@ class DpiVpnService : VpnService() {
         private const val CHANNEL = "ByeDPI_Vpn_Service"
         private const val NOTIFICATION_ID = 103
         private const val TAG = "DpiVpnService"
-
-        /** Starts the VPN with the given engine argv and routing (caller has already passed the policy gate). */
-        fun start(
-            context: Context,
-            args: List<String>,
-            host: String,
-            port: Int,
-            routing: DpiVpnRouting,
-            receiver: ResultReceiver? = null,
-        ) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, DpiVpnService::class.java)
-                    .setAction(ACTION_START)
-                    .putStringArrayListExtra(EXTRA_ARGS, ArrayList(args))
-                    .putExtra(EXTRA_HOST, host)
-                    .putExtra(EXTRA_PORT, port)
-                    .putExtra(EXTRA_DNS, routing.dns)
-                    .putExtra(EXTRA_IPV6, routing.ipv6)
-                    .putExtra(EXTRA_APP_LIST_MODE, routing.appListMode.name)
-                    .putStringArrayListExtra(EXTRA_APPS, ArrayList(routing.apps))
-                    .putExtra(EXTRA_RESULT_RECEIVER, receiver),
-            )
-        }
-
-        fun stop(context: Context) {
-            context.startService(Intent(context, DpiVpnService::class.java).setAction(ACTION_STOP))
-        }
     }
 
     private val proxy by lazy { ByeDpiProxy() }
+    private val sessionBinder = Binder()
     private var engineThread: Thread? = null
     private var tunnelThread: Thread? = null
     private var tunFd: ParcelFileDescriptor? = null
@@ -153,6 +130,7 @@ class DpiVpnService : VpnService() {
             apps = intent.getStringArrayListExtra(EXTRA_APPS)?.toList().orEmpty(),
         )
         val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
+        val replaceAuthorized = intent.getBooleanExtra(EXTRA_REPLACE_AUTHORIZED, false)
         if (args.isNullOrEmpty() || host.isBlank() || port !in 1..65535) {
             report(receiver, "invalid VPN engine configuration")
             terminate()
@@ -162,6 +140,9 @@ class DpiVpnService : VpnService() {
         stopping = false
         ready = false
         engineError = null
+        // Publish the session identity immediately so the caller can establish
+        // death monitoring before the engine is ready.
+        receiver?.send(RESULT_SESSION, Bundle().apply { putBinder(EXTRA_BINDER, sessionBinder) })
         startForeground(notification(getString(R.string.dpi_vpn_notification_running)))
 
         engineThread = thread(name = "ByeDPI") {
@@ -186,7 +167,7 @@ class DpiVpnService : VpnService() {
                 }
                 if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
                     ready = true
-                    startTunnel(receiver, routing, host, port)
+                    startTunnel(receiver, routing, host, port, replaceAuthorized)
                     return@thread
                 }
                 Thread.sleep(POLL_MS)
@@ -197,9 +178,27 @@ class DpiVpnService : VpnService() {
         }
     }
 
-    /** Establishes the TUN and starts the HEV tunnel forwarding into the engine. */
-    private fun startTunnel(receiver: ResultReceiver?, routing: DpiVpnRouting, host: String, port: Int) {
+    /** Re-checks authorization immediately before establishing, then starts the HEV tunnel. */
+    private fun startTunnel(
+        receiver: ResultReceiver?,
+        routing: DpiVpnRouting,
+        host: String,
+        port: Int,
+        replaceAuthorized: Boolean,
+    ) {
         try {
+            // Immediately before establish: independently re-sample the slot and
+            // re-decide, so a raw (in-app) start intent cannot bypass an
+            // authorization that is no longer valid (foreign VPN appeared, the
+            // prepare grant was revoked, or lockdown became active).
+            val fresh = VpnStartPolicy.decide(AndroidVpnSlotSampler(this).sample(replaceAuthorized))
+            if (fresh !is VpnStartDecision.Start) {
+                report(receiver, "VPN authorization no longer valid: $fresh")
+                runCatching { proxy.stopProxy() }
+                terminate()
+                return
+            }
+
             val fd = establish(routing)
             tunFd = fd
             val tunnelConfig = buildString {
@@ -261,6 +260,9 @@ class DpiVpnService : VpnService() {
 
     private fun stop() {
         stopping = true
+        // Native stop ordering mirrors upstream NativeSession: stop the tunnel
+        // (stop reading TUN) first, then the SOCKS5 engine, then join both
+        // threads, then close the TUN fd, then terminate the :vpn process.
         runCatching { TProxyService.stopTunnel() }
         runCatching { proxy.stopProxy() }
         tunnelThread?.join(2_000)
@@ -304,9 +306,16 @@ class DpiVpnService : VpnService() {
         receiver?.send(RESULT_FAILED, Bundle().apply { putString(EXTRA_ERROR, reason) })
     }
 
+    /**
+     * Ends the session and kills the `:vpn` process. Killing only this process
+     * (never the Telegram process) is what resets the pinned engine's sticky
+     * native globals (`proxy_started`/`params`) so the next VPN start gets a
+     * fresh engine.
+     */
     private fun terminate() {
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
+        Process.killProcess(Process.myPid())
     }
 
     private fun startForeground(notification: Notification) {
