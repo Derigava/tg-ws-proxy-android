@@ -45,6 +45,7 @@ import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
+import com.amurcanov.tgwsproxy.ui.dpi.DpiAppSelector
 import com.amurcanov.tgwsproxy.ui.dpi.DpiBackupActions
 import com.amurcanov.tgwsproxy.ui.dpi.DpiCommandEditor
 import com.amurcanov.tgwsproxy.ui.dpi.DpiDiagnostics
@@ -216,6 +217,8 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 checked = dpiBoot,
                 onCheckedChange = { enabled -> scope.launch { settingsStore.saveDpiAutoStartOnBoot(enabled) } },
             )
+            Spacer(Modifier.height(12.dp))
+            DpiAppSelector()
             Spacer(Modifier.height(12.dp))
             DpiCommandEditor()
             Spacer(Modifier.height(12.dp))

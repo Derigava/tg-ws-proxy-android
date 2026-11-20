@@ -179,6 +179,19 @@ internal class DpiSettingsStore(context: Context) {
     fun deleteDomainList(id: String) =
         mutateDomainLists { current -> current.filterNot { it.id == id } }
 
+    /** Sets the VPN application filter (parity S-07/S-08): type + selected package names. */
+    fun setAppList(type: String, apps: List<String>) {
+        require(type in setOf("disable", "blacklist", "whitelist")) { "Invalid application filter" }
+        val document = JSONObject(exportJson())
+        val settings = document.optJSONObject("settings") ?: JSONObject().also { document.put("settings", it) }
+        settings.put("applist_type", type)
+        val array = org.json.JSONArray()
+        apps.distinct().filter { it.isNotBlank() }.forEach { array.put(it) }
+        document.put("apps", array)
+        connectionOptions(document)
+        check(preferences.edit().putString("backup", document.toString()).commit()) { "Could not save ByeByeDPI app selection" }
+    }
+
     private fun mutateDomainLists(transform: (List<DpiDomainList>) -> List<DpiDomainList>) {
         val document = JSONObject(exportJson())
         val next = transform(domainLists())

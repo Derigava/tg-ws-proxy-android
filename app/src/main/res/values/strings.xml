@@ -246,4 +246,8 @@
     <string name="dpi_domain_list_name">List name</string>
     <string name="dpi_domain_list_domains_hint">One domain per line</string>
     <string name="dpi_domain_list_save">Save list</string>
+    <string name="dpi_app_filter">Application filter</string>
+    <string name="dpi_app_filter_disable">Off</string>
+    <string name="dpi_app_filter_blacklist">Exclude selected</string>
+    <string name="dpi_app_filter_whitelist">Route only selected</string>
 </resources>
