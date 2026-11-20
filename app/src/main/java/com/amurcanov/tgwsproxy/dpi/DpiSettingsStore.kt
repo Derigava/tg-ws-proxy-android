@@ -128,6 +128,13 @@ internal class DpiSettingsStore(context: Context) {
 
     fun clearUnpinnedHistory() = mutateHistory { current -> current.filter { it.pinned } }
 
+    /** Applies a strategy command: enables command mode, sets the args, records history. */
+    fun applyStrategy(command: String) {
+        if (command.isBlank()) return
+        updateSettings(mapOf("byedpi_enable_cmd_settings" to true, "byedpi_cmd_args" to command))
+        addCommand(command)
+    }
+
     private fun mutateHistory(transform: (List<DpiCommand>) -> List<DpiCommand>) {
         val document = JSONObject(exportJson())
         val next = transform(historyFrom(document))

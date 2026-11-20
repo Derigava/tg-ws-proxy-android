@@ -225,4 +225,11 @@
     <string name="dpi_cmd_use_command_line">Use command line</string>
     <string name="dpi_cmd_args">Command line</string>
     <string name="dpi_cmd_args_hint">ciadpi arguments, one per line or space-separated</string>
+    <string name="dpi_strategy_history">Strategy history</string>
+    <string name="dpi_strategy_history_empty">No saved strategies yet</string>
+    <string name="dpi_strategy_apply">Apply</string>
+    <string name="dpi_strategy_pin">Pin</string>
+    <string name="dpi_strategy_unpin">Unpin</string>
+    <string name="dpi_strategy_delete">Delete</string>
+    <string name="dpi_strategy_clear_unpinned">Clear unpinned</string>
 </resources>

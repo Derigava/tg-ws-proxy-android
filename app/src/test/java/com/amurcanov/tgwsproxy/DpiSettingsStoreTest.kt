@@ -179,4 +179,13 @@ class DpiSettingsStoreTest {
         store.deleteCommand("-o1")
         assertTrue(store.history().isEmpty())
     }
+
+    @Test fun applyStrategySwitchesToCommandMode() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_enable_cmd_settings":false}}""")
+        store.applyStrategy("-d3 -a2")
+        val options = store.connectionOptions()
+        assertEquals(listOf("-d3", "-a2"), options.args)
+        assertEquals("-d3 -a2", store.currentSettings()["byedpi_cmd_args"])
+        assertEquals(listOf("-d3 -a2"), store.history().map { it.text }.take(1))
+    }
 }

@@ -224,4 +224,11 @@
     <string name="dpi_cmd_use_command_line">Использовать командную строку</string>
     <string name="dpi_cmd_args">Командная строка</string>
     <string name="dpi_cmd_args_hint">Аргументы ciadpi, по одному в строке или через пробел</string>
+    <string name="dpi_strategy_history">История стратегий</string>
+    <string name="dpi_strategy_history_empty">Сохранённых стратегий пока нет</string>
+    <string name="dpi_strategy_apply">Применить</string>
+    <string name="dpi_strategy_pin">Закрепить</string>
+    <string name="dpi_strategy_unpin">Открепить</string>
+    <string name="dpi_strategy_delete">Удалить</string>
+    <string name="dpi_strategy_clear_unpinned">Удалить незакреплённые</string>
 </resources>
