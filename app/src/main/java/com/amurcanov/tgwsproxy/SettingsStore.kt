@@ -41,6 +41,9 @@ class SettingsStore(private val context: Context) {
         val CUSTOM_CF_DOMAIN = stringPreferencesKey("custom_cf_domain")
         val CF_WORKER_DOMAIN = stringPreferencesKey("cf_worker_domain")
         val AUTO_START_ON_BOOT = booleanPreferencesKey("auto_start_on_boot")
+        val DPI_AUTO_START_ON_BOOT = booleanPreferencesKey("dpi_auto_start_on_boot")
+        val DPI_SOCKS5_HOST = stringPreferencesKey("dpi_socks5_host")
+        val DPI_SOCKS5_PORT = intPreferencesKey("dpi_socks5_port")
         val SECRET_KEY = stringPreferencesKey("secret_key")
         val LOG_SHOW_DEBUG = booleanPreferencesKey("log_show_debug")
         val LOG_SHOW_INFO = booleanPreferencesKey("log_show_info")
@@ -89,6 +92,12 @@ class SettingsStore(private val context: Context) {
     val customCfDomain: Flow<String> = context.dataStore.data.map { it[Keys.CUSTOM_CF_DOMAIN] ?: "" }
     val cfWorkerDomain: Flow<String> = context.dataStore.data.map { it[Keys.CF_WORKER_DOMAIN] ?: "" }
     val autoStartOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUTO_START_ON_BOOT] ?: false }
+    // The DPI module has its own boot opt-in. It defaults to false and is never
+    // created by an update, so a VPN/SOCKS5 engine is never auto-started after
+    // an upgrade unless the user explicitly opts in (task 5 exposes the switch).
+    val dpiAutoStartOnBoot: Flow<Boolean> = context.dataStore.data.map { it[Keys.DPI_AUTO_START_ON_BOOT] ?: false }
+    val dpiSocks5Host: Flow<String> = context.dataStore.data.map { it[Keys.DPI_SOCKS5_HOST] ?: "127.0.0.1" }
+    val dpiSocks5Port: Flow<Int> = context.dataStore.data.map { it[Keys.DPI_SOCKS5_PORT] ?: 1080 }
     val secretKey: Flow<String> = context.dataStore.data.map { it[Keys.SECRET_KEY] ?: "" }
 
     val logShowDebug: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOG_SHOW_DEBUG] ?: false }
@@ -158,6 +167,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun saveAutoStartOnBoot(enabled: Boolean) {
         context.dataStore.edit { it[Keys.AUTO_START_ON_BOOT] = enabled }
+    }
+
+    suspend fun saveDpiAutoStartOnBoot(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.DPI_AUTO_START_ON_BOOT] = enabled }
     }
 
     suspend fun saveUpdatePostpone(version: String, until: Long) {
