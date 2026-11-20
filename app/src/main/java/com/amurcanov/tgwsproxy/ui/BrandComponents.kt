@@ -352,6 +352,43 @@ fun BrandField(
     )
 }
 
+/** Multi-line text input on a surface plate; used for host lists and other newline-delimited values. */
+@Composable
+fun BrandMultilineField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    enabled: Boolean = true,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        singleLine = false,
+        interactionSource = interaction,
+        textStyle = MonoValueStyle.copy(color = if (enabled) Brand.ink else Brand.muted),
+        cursorBrush = SolidColor(Brand.accent),
+        modifier = modifier.heightIn(min = 96.dp),
+        decorationBox = { inner ->
+            Box(
+                contentAlignment = Alignment.TopStart,
+                modifier = Modifier
+                    .background(Brand.surface)
+                    .then(if (focused) Modifier.border(1.dp, Brand.accent) else Modifier)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+            ) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, style = MonoValueStyle, color = Brand.muted)
+                }
+                inner()
+            }
+        }
+    )
+}
+
 /** Mono label and value, separated by the screen background so the table reads as rows. */
 @Composable
 fun KeyValueTable(rows: List<Pair<String, String>>, modifier: Modifier = Modifier) {

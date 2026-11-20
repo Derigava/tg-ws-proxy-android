@@ -199,6 +199,8 @@
     <string name="dpi_strategy_desync_https">HTTPS desync</string>
     <string name="dpi_strategy_desync_udp">UDP desync</string>
     <string name="dpi_strategy_hosts">Hosts</string>
+    <string name="dpi_strategy_hosts_blacklist">One host per line (blacklist)</string>
+    <string name="dpi_strategy_hosts_whitelist">One host per line (whitelist)</string>
     <string name="dpi_strategy_other">Other</string>
     <string name="dpi_strategy_default_ttl">Default TTL</string>
     <string name="dpi_strategy_no_domain">No domain</string>

@@ -198,6 +198,8 @@
     <string name="dpi_strategy_desync_https">Десинхронизация HTTPS</string>
     <string name="dpi_strategy_desync_udp">Десинхронизация UDP</string>
     <string name="dpi_strategy_hosts">Хосты</string>
+    <string name="dpi_strategy_hosts_blacklist">По одному хосту в строке (чёрный список)</string>
+    <string name="dpi_strategy_hosts_whitelist">По одному хосту в строке (белый список)</string>
     <string name="dpi_strategy_other">Прочее</string>
     <string name="dpi_strategy_default_ttl">TTL по умолчанию</string>
     <string name="dpi_strategy_no_domain">Без домена</string>
