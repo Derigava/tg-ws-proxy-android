@@ -249,4 +249,6 @@
     <string name="dpi_app_filter_disable">Выключен</string>
     <string name="dpi_app_filter_blacklist">Исключить выбранные</string>
     <string name="dpi_app_filter_whitelist">Только выбранные</string>
+    <string name="dpi_change_strategy">Сменить стратегию</string>
+    <string name="dpi_change_strategy_empty">Закреплённых стратегий пока нет</string>
 </resources>

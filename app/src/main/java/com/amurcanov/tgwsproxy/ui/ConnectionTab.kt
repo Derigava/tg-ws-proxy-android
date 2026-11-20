@@ -46,6 +46,7 @@ import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.dpi.VpnPrepareContract
 import com.amurcanov.tgwsproxy.dpi.VpnRefuseReason
 import com.amurcanov.tgwsproxy.dpi.VpnReplacement
+import com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyPickerDialog
 import com.amurcanov.tgwsproxy.dpi.VpnStartDecision
 import kotlinx.coroutines.launch
 
@@ -150,6 +151,7 @@ fun ConnectionTab(
     // Immutable replacement proof minted before the offer dialog is shown; reused
     // on confirm, never re-minted against a freshly sampled VPN.
     var pendingOffer by remember { mutableStateOf<Pair<Boolean, VpnReplacement>?>(null) }
+    var showStrategyPicker by remember { mutableStateOf(false) }
 
     // Strings resolved once in composition (stringResource is @Composable), then
     // read by the non-composable command lambdas below.
@@ -247,6 +249,12 @@ fun ConnectionTab(
             onApplyInTelegram = { activeConnection?.let { TelegramConnector.open(context, it) } }
         )
 
+        BrandLink(
+            text = stringResource(R.string.dpi_change_strategy),
+            onClick = { showStrategyPicker = true },
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
         if (showAccessWarning) {
             AccessWarningRow(onClick = onShowAccess, modifier = Modifier.padding(bottom = 10.dp))
         }
@@ -321,6 +329,10 @@ fun ConnectionTab(
                 onClick = { pendingOffer = null }
             )
         }
+    }
+
+    if (showStrategyPicker) {
+        DpiStrategyPickerDialog(onDismiss = { showStrategyPicker = false })
     }
 }
 
