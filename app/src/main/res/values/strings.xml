@@ -250,4 +250,6 @@
     <string name="dpi_app_filter_disable">Off</string>
     <string name="dpi_app_filter_blacklist">Exclude selected</string>
     <string name="dpi_app_filter_whitelist">Route only selected</string>
+    <string name="dpi_change_strategy">Change strategy</string>
+    <string name="dpi_change_strategy_empty">No pinned strategies yet</string>
 </resources>
