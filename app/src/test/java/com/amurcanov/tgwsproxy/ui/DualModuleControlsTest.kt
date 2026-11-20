@@ -124,6 +124,21 @@ class DualModuleControlsTest {
     }
 
     @Test
+    fun changeStrategyPickerAppliesPinnedStrategy() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = com.amurcanov.tgwsproxy.dpi.DpiSettingsStore(context)
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"},"history":[{"text":"-d2 -a1","pinned":true,"name":"Default"}]}""")
+        composeRule.setContent {
+            TgWsProxyTheme { com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyPickerDialog(onDismiss = {}) }
+        }
+        composeRule.onNodeWithText("Default").assertExists()
+        composeRule.onNodeWithText("Apply").performClick()
+        composeRule.waitForIdle()
+        assertEquals("-d2 -a1", store.currentSettings()["byedpi_cmd_args"])
+        assertEquals(true, store.currentSettings()["byedpi_enable_cmd_settings"])
+    }
+
+    @Test
     fun strategyEditorPersistsDesyncMethodChoice() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val store = com.amurcanov.tgwsproxy.dpi.DpiSettingsStore(context)
