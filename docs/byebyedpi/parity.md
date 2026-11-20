@@ -55,7 +55,7 @@
 | Раздел | Перенесено | Автопроверка | Устройство |
 |---|---|---|---|
 | §1 Manifest и внешние точки | частично (VPN/SOCKS5-сервисы, автозапуск SOCKS5, разрешения, package ID) | `check_permissions.check_components`, `check_apk.check_dpi_libraries`, манифест-тесты | pending (M-03/M-06/M-07/M-12 внешние точки, always-on) |
-| §2 Главный экран | частично (две кнопки, статус/адрес, «Применить») | `DualModuleControlsTest` | pending (G-05 сменить стратегию — реализовано в настройках, G-09 диагностика — реализована, пульт) |
+| §2 Главный экран | частично (две кнопки, статус/адрес, «Применить», смена стратегии G-05) | `DualModuleControlsTest` (включая смену стратегии), `DpiStrategyPickerDialog` | pending (пульт, G-09 диагностика на главном) |
 | §3 Настройки режима | endpoint/DNS/IPv6/фильтр приложений и выбор приложений применяются | `DpiSettingsStoreTest`, `DpiAppSelector` | pending (S-17/S-18 разрешения) |
 | §4 Стандартный редактор | **все U-01…U-26** | `DpiSettingsStoreTest` (маппинг `strategyArgs`) | pending (фактическая передача движку) |
 | §5 Командная строка и история | **все C-01…C-05, S-11** | `DpiSettingsStoreTest` (`commandTokens`, `history`, `applyStrategy`) | pending (фактическая передача движку) |
