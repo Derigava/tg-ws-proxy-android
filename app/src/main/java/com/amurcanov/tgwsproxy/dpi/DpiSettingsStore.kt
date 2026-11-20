@@ -95,10 +95,26 @@ internal class DpiSettingsStore(context: Context) {
             require(it is String) { "Expected text in $key" }
             it
         } ?: default
-        val rawPort = settings.section("byedpi_proxy_port") ?: "1080"
-        val port = rawPort.toString().toIntOrNull()?.takeIf { it in 1..65535 }
-            ?: throw IllegalArgumentException("Invalid SOCKS5 port")
-        val host = text("byedpi_proxy_ip", "127.0.0.1").removeSurrounding("[", "]")
+        val commandMode = (settings.section("byedpi_enable_cmd_settings") as? Boolean) ?: true
+
+        val host: String
+        val port: Int
+        val args: List<String>
+        if (commandMode) {
+            val (tokens, endpoint) = commandTokens(settings, snapshot)
+            val (cmdIp, cmdPort) = endpoint
+            host = (cmdIp ?: text("byedpi_proxy_ip", "127.0.0.1")).removeSurrounding("[", "]")
+            port = (cmdPort ?: (settings.section("byedpi_proxy_port") ?: "1080").toString())
+                .toIntOrNull()?.takeIf { it in 1..65535 }
+                ?: throw IllegalArgumentException("Invalid SOCKS5 port")
+            args = tokens
+        } else {
+            host = text("byedpi_proxy_ip", "127.0.0.1").removeSurrounding("[", "]")
+            port = (settings.section("byedpi_proxy_port") ?: "1080").toString().toIntOrNull()
+                ?.takeIf { it in 1..65535 }
+                ?: throw IllegalArgumentException("Invalid SOCKS5 port")
+            args = strategyArgs(settings)
+        }
         val loopback = when (host) {
             "127.0.0.1", "0.0.0.0" -> "127.0.0.1"
             "::1", "::" -> "::1"
@@ -119,7 +135,6 @@ internal class DpiSettingsStore(context: Context) {
         }
         val dns = text("dns_ip", "").trim()
         require(dns.isEmpty() || isNumericDnsAddress(dns)) { "DNS address must be numeric" }
-        val args = strategyArgs(settings)
         return DpiConnectionOptions(loopback, port, DpiVpnRouting(dns = dns, ipv6 = ipv6, appListMode = appList, apps = apps), args)
     }
 
@@ -247,6 +262,136 @@ internal class DpiSettingsStore(context: Context) {
         }
     }
 
+    /**
+     * Command-line mode (upstream `ByeDpiProxyCmdPreferences`). Mirrors upstream
+     * `parseCmdToArguments`: expand `{list:name}` placeholders from the domain
+     * lists, shell-split, drop leading non-flag tokens, filter help/version, then
+     * let the caller splice `--ip`/`--port` for the endpoint. Returns the tokens
+     * minus the ip/port tokens, plus the ip/port extracted from the command.
+     */
+    private fun commandTokens(settings: JSONObject, snapshot: JSONObject): Pair<List<String>, Pair<String?, String?>> {
+        val raw = settings.section("byedpi_cmd_args") as? String ?: DEFAULT_CMD_ARGS
+        val expanded = Regex("""\{list:([^}]+)\}""").replace(raw) { match ->
+            val name = match.groupValues[1].trim()
+            snapshot.optJSONArray("domainLists")?.let { lists ->
+                for (index in 0 until lists.length()) {
+                    val list = lists.getJSONObject(index)
+                    if (list.optString("name").equals(name, ignoreCase = true)) {
+                        return@replace list.optJSONArray("domains")?.let { domains ->
+                            (0 until domains.length()).joinToString(" ") { domains.getString(it) }
+                        } ?: ""
+                    }
+                }
+            }
+            ""
+        }
+        val tokens = shellSplit(expanded)
+            .dropWhile { !it.startsWith("-") }
+            .filter { it !in setOf("--help", "--version", "-h", "-v") }
+        val (ip, port) = tokens.extractIpAndPort()
+        return tokens.minusIpPort() to (ip to port)
+    }
+
+    private fun shellSplit(string: CharSequence): List<String> {
+        val tokens = mutableListOf<String>()
+        var quoteChar = ' '
+        var escaping = false
+        var quoting = false
+        var lastCloseQuoteIndex = Int.MIN_VALUE
+        var current = StringBuilder()
+        for (i in string.indices) {
+            val c = string[i]
+            if (escaping) {
+                current.append(c)
+                escaping = false
+            } else if (c == '\\' && quoting) {
+                if (i + 1 < string.length && string[i + 1] == quoteChar) escaping = true else current.append(c)
+            } else if (quoting && c == quoteChar) {
+                quoting = false
+                lastCloseQuoteIndex = i
+            } else if (!quoting && (c == '\'' || c == '"')) {
+                quoting = true
+                quoteChar = c
+            } else if (!quoting && Character.isWhitespace(c)) {
+                if (current.isNotEmpty() || lastCloseQuoteIndex == i - 1) {
+                    tokens.add(current.toString())
+                    current = StringBuilder()
+                }
+            } else {
+                current.append(c)
+            }
+        }
+        if (current.isNotEmpty() || lastCloseQuoteIndex == string.length - 1) tokens.add(current.toString())
+        return tokens
+    }
+
+    private val NO_VALUE_FLAGS = setOf(
+        "--daemon", "--no-domain", "--no-ipv6", "--no-udp", "--help", "--version",
+        "--transparent", "--tfo", "--md5sig", "--wait-send", "--drop-sack",
+    )
+
+    private fun List<String>.extractIpAndPort(): Pair<String?, String?> {
+        var host: String? = null
+        var port: String? = null
+        var index = 0
+        while (index < size) {
+            val arg = this[index++]
+            if (arg == "--") break
+            if (arg.startsWith("--")) {
+                val key = arg.substringBefore('=')
+                if (NO_VALUE_FLAGS.any { it.startsWith(key) }) continue
+                val value = if ('=' in arg) arg.substringAfter('=') else getOrNull(index++)
+                when (key) {
+                    "--ip" -> host = value
+                    "--po", "--por", "--port" -> port = value
+                }
+            } else if (arg.startsWith("-")) {
+                for (position in 1 until arg.length) {
+                    val key = arg[position]
+                    if (key in "DNXUhvEFSZY") continue
+                    val value = arg.substring(position + 1).ifEmpty { getOrNull(index++) }
+                    when (key) {
+                        'i' -> host = value
+                        'p' -> port = value
+                    }
+                    break
+                }
+            }
+        }
+        return host to port
+    }
+
+    /** Drops the `-i`/`-p`/`--ip`/`--port` tokens so the endpoint is never duplicated. */
+    private fun List<String>.minusIpPort(): List<String> {
+        val result = mutableListOf<String>()
+        var index = 0
+        while (index < size) {
+            val arg = this[index]
+            if (arg == "--") { result.add(arg); index++; continue }
+            var consumedValue = false
+            if (arg.startsWith("--")) {
+                val key = arg.substringBefore('=')
+                if (key == "--ip" || key == "--po" || key == "--por" || key == "--port") {
+                    if ('=' !in arg) index++
+                    consumedValue = true
+                }
+            } else if (arg.startsWith("-") && !arg.startsWith("--")) {
+                for (position in 1 until arg.length) {
+                    val key = arg[position]
+                    if (key in "DNXUhvEFSZY") continue
+                    if (key == 'i' || key == 'p') {
+                        if (arg.substring(position + 1).isEmpty()) index++
+                        consumedValue = true
+                    }
+                    break
+                }
+            }
+            if (!consumedValue) result.add(arg)
+            index++
+        }
+        return result
+    }
+
     private fun JSONObject.section(name: String): Any? = if (isNull(name)) null else get(name)
 
     private fun records(
@@ -281,6 +426,7 @@ internal class DpiSettingsStore(context: Context) {
     private companion object {
         const val UPSTREAM_APP = "io.github.romanvht.byedpi"
         const val MAX_CHARS = 2 * 1024 * 1024
+        const val DEFAULT_CMD_ARGS = "-o1 -a1 -r-5+se"
         val DOMAIN_FLAGS = setOf("isActive", "isBuiltIn", "isModified", "isDeleted")
         val SETTINGS_KEYS = setOf(
             "language", "app_theme", "dns_ip", "private_dns", "ipv6_enable", "applist_type", "autostart", "auto_connect",

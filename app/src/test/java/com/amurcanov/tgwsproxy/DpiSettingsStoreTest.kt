@@ -29,7 +29,7 @@ class DpiSettingsStoreTest {
     }
 
     @Test fun strategyParametersMapToEngineArguments() {
-        val strategy = """{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_max_connections":"100","byedpi_buffer_size":"4096","byedpi_desync_http":true,"byedpi_desync_https":true,"byedpi_desync_udp":true,"byedpi_hosts_mode":"blacklist","byedpi_hosts_blacklist":"example.com\ngoogle.com","byedpi_default_ttl":"64","byedpi_no_domain":true,"byedpi_desync_method":"oob","byedpi_split_position":"2","byedpi_split_at_host":true,"byedpi_fake_ttl":"8","byedpi_fake_sni":"www.iana.org","byedpi_fake_offset":"4","byedpi_oob_data":"a","byedpi_host_mixed_case":true,"byedpi_host_remove_spaces":true,"byedpi_tlsrec_enabled":true,"byedpi_tlsrec_position":"3","byedpi_tlsrec_at_sni":true,"byedpi_tcp_fast_open":true,"byedpi_drop_sack":true,"byedpi_udp_fake_count":"2"}}"""
+        val strategy = """{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_enable_cmd_settings":false,"byedpi_max_connections":"100","byedpi_buffer_size":"4096","byedpi_desync_http":true,"byedpi_desync_https":true,"byedpi_desync_udp":true,"byedpi_hosts_mode":"blacklist","byedpi_hosts_blacklist":"example.com\ngoogle.com","byedpi_default_ttl":"64","byedpi_no_domain":true,"byedpi_desync_method":"oob","byedpi_split_position":"2","byedpi_split_at_host":true,"byedpi_fake_ttl":"8","byedpi_fake_sni":"www.iana.org","byedpi_fake_offset":"4","byedpi_oob_data":"a","byedpi_host_mixed_case":true,"byedpi_host_remove_spaces":true,"byedpi_tlsrec_enabled":true,"byedpi_tlsrec_position":"3","byedpi_tlsrec_at_sni":true,"byedpi_tcp_fast_open":true,"byedpi_drop_sack":true,"byedpi_udp_fake_count":"2"}}"""
         store.importJson(strategy)
         assertEquals(
             listOf(
@@ -41,19 +41,38 @@ class DpiSettingsStoreTest {
         )
     }
 
-    @Test fun defaultStrategyMirrorsUpstreamUISettingsDefaults() {
+    @Test fun defaultIsCommandModeWithUpstreamDefaults() {
         store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        // Upstream defaults byedpi_enable_cmd_settings=true with DEFAULT_CMD_ARGS "-o1 -a1 -r-5+se".
+        assertEquals(listOf("-o1", "-a1", "-r-5+se"), store.connectionOptions().args)
+    }
+
+    @Test fun uiModeUsesStandardEditorArgs() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_enable_cmd_settings":false}}""")
         assertEquals(
             listOf("-c512", "-b16384", "-Kt,h", "-o1", "-e97", "-An", "-Ku", "-a1", "-An"),
             store.connectionOptions().args,
         )
     }
 
+    @Test fun commandModeEndpointOverridesDefault() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_enable_cmd_settings":true,"byedpi_cmd_args":"--ip 127.0.0.1 --port 2345 -o2"}}""")
+        val options = store.connectionOptions()
+        assertEquals(2345, options.port)
+        assertEquals("127.0.0.1", options.host)
+        assertEquals(listOf("-o2"), options.args)
+    }
+
+    @Test fun commandListPlaceholderExpandsDomains() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_enable_cmd_settings":true,"byedpi_cmd_args":"-H{list:blocked}"},"domainLists":[{"id":"1","name":"blocked","domains":["a.com"]}]}""")
+        assertEquals(listOf("-Ha.com"), store.connectionOptions().args)
+    }
+
     @Test fun invalidStrategyValueDoesNotOverwriteBackup() {
-        store.importJson(fixture)
+        store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_enable_cmd_settings\":false"))
         val before = store.exportJson()
         assertThrows(IllegalArgumentException::class.java) {
-            store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_desync_method\":\"bogus\""))
+            store.importJson(before.replace("\"byedpi_enable_cmd_settings\":false", "\"byedpi_enable_cmd_settings\":false,\"byedpi_desync_method\":\"bogus\""))
         }
         assertEquals(before, store.exportJson())
     }
@@ -106,7 +125,7 @@ class DpiSettingsStoreTest {
     }
 
     @Test fun editingStrategyFieldsPersistsAndRevalidates() {
-        store.importJson(fixture)
+        store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_enable_cmd_settings\":false"))
         store.updateSettings(mapOf("byedpi_desync_method" to "split", "byedpi_split_position" to "4"))
         val options = store.connectionOptions()
         assertTrue(options.args.contains("-s4"))
@@ -116,7 +135,7 @@ class DpiSettingsStoreTest {
     }
 
     @Test fun editingInvalidStrategyDoesNotOverwriteBackup() {
-        store.importJson(fixture)
+        store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_enable_cmd_settings\":false"))
         val before = store.exportJson()
         assertThrows(IllegalArgumentException::class.java) {
             store.updateSettings(mapOf("byedpi_desync_method" to "bogus"))
