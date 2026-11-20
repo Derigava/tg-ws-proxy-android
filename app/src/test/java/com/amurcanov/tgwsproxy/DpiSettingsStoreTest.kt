@@ -149,4 +149,34 @@ class DpiSettingsStoreTest {
             store.updateSettings(mapOf("secret_key" to "must-not-leak"))
         }
     }
+
+    @Test fun commandHistoryDedupsPinsAndCaps() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        store.addCommand("-o1")
+        store.addCommand("-o2")
+        store.addCommand("-o1") // duplicate: no second entry
+        assertEquals(listOf("-o2", "-o1"), store.history().map { it.text })
+        store.pinCommand("-o2")
+        assertEquals(listOf("-o2"), store.pinnedHistory().map { it.text })
+        store.unpinCommand("-o2")
+        assertTrue(store.pinnedHistory().isEmpty())
+    }
+
+    @Test fun clearUnpinnedKeepsPinnedCommands() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        store.addCommand("-o1")
+        store.addCommand("-o2")
+        store.pinCommand("-o2")
+        store.clearUnpinnedHistory()
+        assertEquals(listOf("-o2"), store.history().map { it.text })
+    }
+
+    @Test fun deleteAndRenameCommands() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        store.addCommand("-o1")
+        store.renameCommand("-o1", "default")
+        assertEquals("default", store.history().first().name)
+        store.deleteCommand("-o1")
+        assertTrue(store.history().isEmpty())
+    }
 }
