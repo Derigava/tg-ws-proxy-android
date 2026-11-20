@@ -9,7 +9,8 @@ import org.json.JSONObject
 internal class DpiSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences("dpi_document", Context.MODE_PRIVATE)
 
-    fun exportJson(): String = preferences.getString("backup", null) ?: document().toString()
+    fun exportJson(): String = preferences.getString("backup", null)
+        ?: document().put("settings", JSONObject()).toString()
 
     fun importJson(json: String) {
         require(json.length <= MAX_CHARS) { "ByeByeDPI document exceeds the size limit" }

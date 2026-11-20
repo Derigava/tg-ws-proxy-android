@@ -141,6 +141,8 @@ class DualModuleControlsTest {
         composeRule.onNodeWithText("TG-WS").assertExists()
         composeRule.onNodeWithText("ByeByeDPI").performClick()
         composeRule.onNodeWithText("SOCKS5").assertExists()
+        composeRule.onNodeWithText("Import ByeByeDPI backup").assertHasClickAction()
+        composeRule.onNodeWithText("Export ByeByeDPI backup").assertHasClickAction()
     }
 
     @Test
