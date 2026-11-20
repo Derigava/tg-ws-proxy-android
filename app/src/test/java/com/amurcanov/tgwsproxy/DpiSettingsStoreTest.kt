@@ -28,6 +28,13 @@ class DpiSettingsStoreTest {
         assertFalse(output.toString().contains("not-for-export"))
     }
 
+    @Test fun emptyStoreCanExportAnImportableBackup() {
+        context.getSharedPreferences("dpi_document", Context.MODE_PRIVATE).edit().clear().commit()
+        val initial = store.exportJson()
+        store.importJson(initial)
+        assertEquals(initial, store.exportJson())
+    }
+
     @Test fun malformedLaterSectionDoesNotReplacePreviousSnapshot() {
         store.importJson(fixture)
         val before = store.exportJson()
