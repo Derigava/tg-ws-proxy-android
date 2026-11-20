@@ -17,7 +17,8 @@ import kotlinx.coroutines.sync.withLock
  *
  * Start and stop are fire-and-forget (safe to call from the UI thread); the
  * engine call runs on [Dispatchers.IO] and is serialized by a mutex so a stop
- * never races an in-flight start.
+ * never races an in-flight start. An engine that dies after Running is observed
+ * through [DpiEngine.onExit] and drives the state out of Running.
  */
 class DpiController(private val engine: DpiEngine) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -26,6 +27,10 @@ class DpiController(private val engine: DpiEngine) {
 
     /** Current controller state; collectors see Off/Starting/Running/Stopping/Failed. */
     val state: StateFlow<DpiState> = _state.asStateFlow()
+
+    init {
+        engine.onExit = { onEngineExit() }
+    }
 
     fun start(config: DpiConfig) {
         val current = _state.value
@@ -54,6 +59,14 @@ class DpiController(private val engine: DpiEngine) {
                 runCatching { engine.stop() }
                 _state.value = DpiState.Off
             }
+        }
+    }
+
+    private fun onEngineExit() {
+        // Only a running session can die unexpectedly; a stop already in flight
+        // (Stopping) or an already-stopped engine (Off) must not be overridden.
+        if (_state.value is DpiState.Running) {
+            _state.value = DpiState.Failed("engine process exited")
         }
     }
 }
