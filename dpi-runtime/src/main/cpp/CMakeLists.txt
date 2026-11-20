@@ -8,8 +8,7 @@ enable_language(ASM)
 
 # The native engine sources are pinned (immutable) under upstream/byebyedpi/.
 # This module compiles them in place: it never copies or modifies the snapshot.
-# The only local addition is dpi-jni.c, which wraps listen() to expose a
-# native-owned listener signal (see dpi-jni.c).
+# Local JNI adapters expose listener and tunnel readiness.
 set(UPSTREAM_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../../../upstream/byebyedpi/app/src/main/cpp")
 
 file(GLOB BYE_DPI_SRC "${UPSTREAM_CPP}/byedpi/*.c")
@@ -35,9 +34,8 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size
 
 # ---------------------------------------------------------------------------
 # libhev-socks5-tunnel.so — the HEV TUN->SOCKS5 tunnel for VPN mode. The pinned
-# upstream builds this with ndk-build (app/src/main/jni/Android.mk); this CMake
-# target mirrors that build byte-for-byte: the same sources, the same include
-# paths, and the same flags. Each third-party static library and every
+# upstream builds this with ndk-build (app/src/main/jni/Android.mk). This
+# target builds the same tunnel core and third-party libraries. Each
 # platform-specific translation unit is guarded by its platform macro (e.g.
 # lwip's win32 port is `#if _WIN32`), so globbing the whole tree is faithful to
 # the upstream `rwildcard` and compiles cleanly on Android.
@@ -89,6 +87,9 @@ target_compile_definitions(hev-task-system PRIVATE
 
 # libhev-socks5-tunnel.so (shared)
 file(GLOB_RECURSE TUNNEL_SRC "${HEV_TUNNEL}/src/*.c" "${HEV_TUNNEL}/src/*.S")
+# ByeByeDPI already supplies its own TProxyService JNI via UPSTREAM_CPP/hev-jni.c.
+# The standalone HEV Java bridge registers a different ABI on JNI_OnLoad.
+list(REMOVE_ITEM TUNNEL_SRC "${HEV_TUNNEL}/src/hev-jni.c")
 add_library(hev-socks5-tunnel SHARED ${TUNNEL_SRC} "${CMAKE_CURRENT_SOURCE_DIR}/hev-ready-jni.c")
 target_include_directories(hev-socks5-tunnel PRIVATE
     "${HEV_TUNNEL}/src"
@@ -103,8 +104,7 @@ target_compile_definitions(hev-socks5-tunnel PRIVATE
     ANDROID
     ENABLE_LIBRARY
     FD_SET_DEFINED
-    SOCKLEN_T_DEFINED
-    PKGNAME=io/github/romanvht/byedpi/core)
+    SOCKLEN_T_DEFINED)
 target_link_libraries(hev-socks5-tunnel PRIVATE yaml lwip hev-task-system android log)
 # --wrap=hev_socks5_tunnel_run exposes the genuine native-ready signal (see
 # hev-ready-jni.c): the pinned tunnel calls that symbol exactly once, only after
