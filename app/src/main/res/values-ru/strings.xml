@@ -245,4 +245,8 @@
     <string name="dpi_domain_list_name">Имя списка</string>
     <string name="dpi_domain_list_domains_hint">По одному домену в строке</string>
     <string name="dpi_domain_list_save">Сохранить список</string>
+    <string name="dpi_app_filter">Фильтр приложений</string>
+    <string name="dpi_app_filter_disable">Выключен</string>
+    <string name="dpi_app_filter_blacklist">Исключить выбранные</string>
+    <string name="dpi_app_filter_whitelist">Только выбранные</string>
 </resources>

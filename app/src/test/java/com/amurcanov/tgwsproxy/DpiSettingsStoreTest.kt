@@ -211,4 +211,21 @@ class DpiSettingsStoreTest {
         store.deleteDomainList("blocked")
         assertTrue(store.domainLists().isEmpty())
     }
+
+    @Test fun appSelectionPersistsWhitelist() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        store.setAppList("whitelist", listOf("org.a", "org.b", "org.a"))
+        val options = store.connectionOptions()
+        assertEquals(com.amurcanov.tgwsproxy.dpi.VpnAppListMode.WHITELIST, options.routing.appListMode)
+        assertEquals(listOf("org.a", "org.b"), options.routing.apps)
+    }
+
+    @Test fun invalidAppListTypeDoesNotOverwriteBackup() {
+        store.importJson(fixture)
+        val before = store.exportJson()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.setAppList("bogus", listOf("org.a"))
+        }
+        assertEquals(before, store.exportJson())
+    }
 }

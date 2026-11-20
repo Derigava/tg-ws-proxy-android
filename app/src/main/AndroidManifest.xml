@@ -33,6 +33,13 @@
         <package android:name="ru.dahl.messenger" />
         <package android:name="com.scriptsaz.litegram" />
         <package android:name="org.thunderdog.challegram" />
+        <!-- VPN application filter: see launchable apps without QUERY_ALL_PACKAGES
+             (Play Protect-compliant). Only the launcher intent is queried, so no
+             app's internal details become visible. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
