@@ -200,7 +200,7 @@ class DpiVpnService : VpnService() {
             // start intent cannot bypass an authorization that is no longer
             // valid, and the proof is validated against the freshly observed
             // slot (attempt identity is preserved here).
-            val fresh = VpnStartPolicy.decide(AndroidVpnSlotSampler(this).sample(), replacement)
+            val fresh = VpnStartPolicy.decide(AndroidVpnSlotSampler(this).sample(replacement), replacement)
             if (fresh !is VpnStartDecision.Start) {
                 report(receiver, "VPN authorization no longer valid: $fresh")
                 runCatching { proxy.stopProxy() }
