@@ -69,6 +69,17 @@ def has_resumed_activity(activities: str, package: str) -> bool:
                re.search(re.escape(package) + r"/", line) for line in activities.splitlines())
 
 
+def startup_log_window(adb) -> tuple[str, ...]:
+    # Some emulator images allow reading logs but deny clearing their buffers.
+    clear = adb("logcat", "-b", "main", "-b", "system", "-b", "crash", "-b", "events", "-c", check=False)
+    if clear.returncode == 0:
+        return ()
+    device_time = adb("shell", "date '+%m-%d %H:%M:%S.000'").stdout.strip()
+    if not re.fullmatch(r"\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.000", device_time):
+        raise ValueError("Could not determine the Android startup log window")
+    return ("-T", device_time)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apk", type=Path)
@@ -106,6 +117,7 @@ def main() -> None:
     activities = ""
     diagnostics: dict[str, str] = {}
     failure: Exception | None = None
+    log_window: tuple[str, ...] = ()
     try:
         if not args.skip_install:
             if "package:" in adb("shell", "pm", "path", args.package, check=False).stdout:
@@ -124,17 +136,15 @@ def main() -> None:
         if sdk >= 33:
             adb("shell", "pm", "grant", args.package, "android.permission.POST_NOTIFICATIONS")
         adb("shell", "am", "force-stop", args.package)
-        # Android 7 restricts privileged buffers selected by "all". Clear only
-        # the application/error buffers which this gate actually inspects.
-        adb("logcat", "-b", "main", "-b", "system", "-b", "crash", "-b", "events", "-c")
+        log_window = startup_log_window(adb)
         started = time.monotonic()
         launch_output = adb("shell", "am", "start", "-W", "-n", f"{args.package}/{args.activity}",
                             check=False, timeout=int(args.startup_timeout)).stdout
         validate_launch(launch_output)
 
         def sample_runtime():
-            crash = adb("logcat", "-d", "-b", "crash", "-v", "threadtime", timeout=15).stdout
-            errors = adb("logcat", "-d", "-b", "main", "-b", "system", "-v", "threadtime",
+            crash = adb("logcat", "-d", *log_window, "-b", "crash", "-v", "threadtime", timeout=15).stdout
+            errors = adb("logcat", "-d", *log_window, "-b", "main", "-b", "system", "-v", "threadtime",
                          "AndroidRuntime:E", "ActivityManager:E", "*:S", timeout=15).stdout
             if owned_failure(crash, args.package) or owned_failure(errors, args.package):
                 raise ValueError("Release crashed or became unresponsive during startup")
@@ -165,8 +175,8 @@ def main() -> None:
         failure = error
     finally:
         for name, command in {
-            "crash": ("logcat", "-d", "-b", "crash", "-v", "threadtime"),
-            "logcat": ("logcat", "-d", "-b", "all", "-v", "threadtime"),
+            "crash": ("logcat", "-d", *log_window, "-b", "crash", "-v", "threadtime"),
+            "logcat": ("logcat", "-d", *log_window, "-b", "all", "-v", "threadtime"),
             "exit-info": ("shell", "dumpsys", "activity", "exit-info", args.package),
         }.items():
             try:
