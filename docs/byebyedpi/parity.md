@@ -9,11 +9,24 @@
 - ABI оригинала: `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`.
 - Лицензия оригинала: **GPL-3.0-only** (файл `LICENSE`, SHA-256
   `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`).
-- Рекурсивные зависимости (git-сабмодули, закреплены в `upstream/byebyedpi.lock.json`):
-  - `app/src/main/cpp/byedpi` → `https://github.com/hufrea/byedpi.git`,
-    коммит `ba532298de7b28cfe854aea83d061369d13ca290`;
-  - `app/src/main/jni/hev-socks5-tunnel` → `https://github.com/heiher/hev-socks5-tunnel.git`,
-    коммит `4d6c334dbfb68a79d1970c2744e62d09f71df12f`.
+- Рекурсивные зависимости (git-сабмодули, закреплены в `upstream/byebyedpi.lock.json`,
+  источники вендорены байт-в-байт по путям вложенных gitlink'ов, лицензии каждого уровня — в lock):
+  - `app/src/main/cpp/byedpi` → `https://github.com/hufrea/byedpi.git` @
+    `ba532298de7b28cfe854aea83d061369d13ca290` (MIT);
+  - `app/src/main/jni/hev-socks5-tunnel` → `https://github.com/heiher/hev-socks5-tunnel.git` @
+    `4d6c334dbfb68a79d1970c2744e62d09f71df12f` (MIT; внутри — `third-part/wintun/LICENSE.txt`,
+    proprietary WireGuard LLC), и его вложенные сабмодули:
+    - `src/core` → `https://github.com/heiher/hev-socks5-core` @
+      `4be2e621813ba0315cfacd995bf501bde91d6996` (MIT);
+    - `third-part/hev-task-system` → `https://github.com/heiher/hev-task-system` @
+      `8d83bbbf79557138726c8ee5a5fae99cbb978d61` (MIT);
+    - `third-part/lwip` → `https://github.com/heiher/lwip` @
+      `07dbf162c718cc78ddedb9e67c6ebd17065eaf13` (BSD-3-Clause, текст lwIP);
+    - `third-part/yaml` → `https://github.com/heiher/yaml` @
+      `efa36117a8646d26d12b58e05bac472d7854a70d` (MIT).
+  - Известная расходимость: `hev-socks5-tunnel/include/hev-socks5-tunnel.h` — симлинк на
+    `src/hev-main.h`; в снимке материализован как байтовая копия цели (иначе checkout Windows
+    нежизнеспособен), отображение зафиксировано в lock (`symlinks`).
 
 Матрица построена по реальным файлам эталона (не только README): `AndroidManifest.xml`,
 `res/menu/*.xml`, `res/xml/*_settings.xml`, `res/values/strings.xml`,
