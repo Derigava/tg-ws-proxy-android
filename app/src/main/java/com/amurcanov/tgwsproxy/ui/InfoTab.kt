@@ -86,7 +86,7 @@ fun InfoTab(settingsStore: SettingsStore) {
     ) {
         BrandHeader(section = stringResource(R.string.nav_info))
         Spacer(Modifier.height(8.dp))
-        ScreenTitle("TG WS Proxy")
+        ScreenTitle(stringResource(R.string.app_name))
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.hero_description),
