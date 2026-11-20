@@ -13,12 +13,12 @@
  */
 int __real_listen(int sockfd, int backlog);
 
-static volatile int g_listener_ready = 0;
+static int g_listener_ready = 0;
 
 int __wrap_listen(int sockfd, int backlog) {
     int result = __real_listen(sockfd, backlog);
     if (result == 0) {
-        g_listener_ready = 1;
+        __atomic_store_n(&g_listener_ready, 1, __ATOMIC_SEQ_CST);
     }
     return result;
 }
@@ -27,5 +27,5 @@ JNIEXPORT jint JNICALL
 Java_com_amurcanov_tgwsproxy_dpi_DpiNative_isListenerReady(JNIEnv *env, jobject thiz) {
     (void) env;
     (void) thiz;
-    return g_listener_ready;
+    return __atomic_load_n(&g_listener_ready, __ATOMIC_SEQ_CST);
 }

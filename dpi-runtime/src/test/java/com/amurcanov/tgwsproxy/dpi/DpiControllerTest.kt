@@ -9,6 +9,8 @@ import org.junit.Test
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Contract test for [DpiController]. The cases pin the behaviour the follow-up
@@ -67,6 +69,21 @@ class DpiControllerTest {
         override fun start(config: DpiConfig): DpiEngineResult {
             // The engine process dies during startup; a stale Running still comes back.
             onExit?.invoke()
+            return DpiEngineResult.Running
+        }
+
+        override fun stop() = Unit
+    }
+
+    /** Test double that blocks inside start so the test can fire the exit from another thread. */
+    private class ThreadedExitEngine : DpiEngine {
+        override var onExit: (() -> Unit)? = null
+        val startEntered = CountDownLatch(1)
+        val allowReturn = CountDownLatch(1)
+
+        override fun start(config: DpiConfig): DpiEngineResult {
+            startEntered.countDown()
+            allowReturn.await(5, TimeUnit.SECONDS)
             return DpiEngineResult.Running
         }
 
@@ -175,6 +192,23 @@ class DpiControllerTest {
             controller.state.first { it is DpiState.Failed || it is DpiState.Running }
         }
         assertTrue("death during startup must not yield Running, got $state", state is DpiState.Failed)
+    }
+
+    @Test
+    fun exitFromAnotherThreadDuringStartupYieldsFailed() {
+        val engine = ThreadedExitEngine()
+        val controller = DpiController(engine)
+        controller.start(DpiConfig(mode = DpiMode.SOCKS5, host = "127.0.0.1", port = 1080))
+        assertTrue(engine.startEntered.await(5, TimeUnit.SECONDS))
+        // The exit lands on a different thread while the worker is still blocked
+        // inside engine.start(); the controller must reconcile it, not publish Running.
+        engine.onExit?.invoke()
+        engine.allowReturn.countDown()
+
+        val state = runBlocking {
+            controller.state.first { it is DpiState.Failed || it is DpiState.Running }
+        }
+        assertTrue("cross-thread death during startup must not yield Running, got $state", state is DpiState.Failed)
     }
 
     @Test
