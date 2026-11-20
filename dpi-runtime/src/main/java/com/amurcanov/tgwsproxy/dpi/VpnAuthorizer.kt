@@ -9,13 +9,8 @@ package com.amurcanov.tgwsproxy.dpi
  * an observation that became unavailable, or a lockdown that became active
  * between decision and establish is refused conservatively.
  *
- * Replacing a foreign VPN is deliberately two-step: the caller first renders
- * the [VpnStartDecision.Offer], then — after the user confirms and (if needed)
- * the OS prepare consent is obtained — calls [confirmReplacement] to mint an
- * immutable [VpnReplacement] bound to the exact observed VPN network handles,
- * and re-runs [authorize] with that proof. A cached prepare grant is never
- * treated as replacement authorization, and a proof can never be minted from an
- * unavailable observation.
+ * Capture the network handles when presenting the replacement offer, and
+ * keep the proof for that attempt across the Android consent dialog.
  */
 class VpnAuthorizer(private val sampler: VpnSlotSampler) {
 

@@ -66,9 +66,9 @@ class VpnStartPolicyTest {
     }
 
     @Test
-    fun thirdPartyReplacementWithDifferentHandlesIsIgnored() {
+    fun thirdPartyReplacementWithDifferentHandlesIsRejected() {
         assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = false),
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
             VpnStartPolicy.decide(
                 req(VpnSlotState.THIRD_PARTY, true, setOf(2L)),
                 VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L)),
@@ -104,11 +104,11 @@ class VpnStartPolicyTest {
     }
 
     @Test
-    fun unknownReplacementWithDifferentHandlesIsIgnored() {
+    fun unknownReplacementWithDifferentHandlesIsRejected() {
         // Same slot state (both UNKNOWN) but a different VPN: the proof is
         // bound to handles {1}, the fresh observation is {2} -> rejected.
         assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = true),
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
             VpnStartPolicy.decide(
                 req(VpnSlotState.UNKNOWN, true, setOf(2L)),
                 VpnReplacement(VpnSlotState.UNKNOWN, setOf(1L)),
@@ -117,10 +117,10 @@ class VpnStartPolicyTest {
     }
 
     @Test
-    fun unknownReplacementWithEmptyNetworksIsIgnored() {
+    fun unknownReplacementWithEmptyNetworksIsRejected() {
         // Empty/identity-less observation must never authorize replacement.
         assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = true),
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
             VpnStartPolicy.decide(
                 req(VpnSlotState.UNKNOWN, true, emptySet()),
                 VpnReplacement(VpnSlotState.UNKNOWN, emptySet()),
@@ -129,9 +129,9 @@ class VpnStartPolicyTest {
     }
 
     @Test
-    fun replacementBoundToWrongSlotIsIgnored() {
+    fun replacementBoundToWrongSlotIsRejected() {
         assertEquals(
-            VpnStartDecision.Offer(ownerUncertain = true),
+            VpnStartDecision.Refuse(VpnRefuseReason.SLOT_CHANGED),
             VpnStartPolicy.decide(
                 req(VpnSlotState.UNKNOWN, true, setOf(1L)),
                 VpnReplacement(VpnSlotState.THIRD_PARTY, setOf(1L)),
