@@ -18,12 +18,21 @@ class ReleaseSmokeTest(unittest.TestCase):
             subprocess.CompletedProcess([], 1, "failed to clear the main log"),
             subprocess.CompletedProcess([], 0, "11-20 23:45:00.000\n"),
         ])
-        self.assertEqual(smoke.startup_log_window(adb), ("-T", "11-20 23:45:00.000"))
+        self.assertEqual(smoke.startup_log_window(adb), "11-20 23:45:00.000")
 
     def test_log_window_stays_empty_after_successful_buffer_clear(self):
         adb = Mock(return_value=subprocess.CompletedProcess([], 0, ""))
-        self.assertEqual(smoke.startup_log_window(adb), ())
+        self.assertIsNone(smoke.startup_log_window(adb))
         self.assertEqual(adb.call_count, 1)
+
+    def test_old_logd_can_return_stale_logs_without_hiding_a_fresh_crash(self):
+        stale = f"11-20 23:44:59.900 123 123 E AndroidRuntime: Process: {PACKAGE}, PID: 123"
+        fresh = f"11-20 23:45:00.010 456 456 E AndroidRuntime: Process: {PACKAGE}, PID: 456"
+        raw = f"{stale}\nstale details\n{fresh}\nfresh details\n"
+        self.assertEqual(
+            smoke.filter_startup_logs(raw, "11-20 23:45:00.000"),
+            f"{fresh}\nfresh details",
+        )
 
     def test_real_release_startup_crash_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "crashed"):
