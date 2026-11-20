@@ -55,7 +55,7 @@ class DpiVpnService : VpnService() {
         const val EXTRA_IPV6 = "EXTRA_IPV6"
         const val EXTRA_APP_LIST_MODE = "EXTRA_APP_LIST_MODE"
         const val EXTRA_APPS = "EXTRA_APPS"
-        const val EXTRA_REPLACE_AUTHORIZED = "EXTRA_REPLACE_AUTHORIZED"
+        const val EXTRA_REPLACEMENT_SLOT = "EXTRA_REPLACEMENT_SLOT"
         const val EXTRA_RESULT_RECEIVER = "EXTRA_RESULT_RECEIVER"
         const val EXTRA_BINDER = "EXTRA_BINDER"
         const val EXTRA_ERROR = "EXTRA_ERROR"
@@ -66,6 +66,7 @@ class DpiVpnService : VpnService() {
 
         private const val PROBE_TIMEOUT_MS = 250
         private const val POLL_MS = 50L
+        private const val TUNNEL_READY_GRACE_MS = 200L
         private const val CHANNEL = "ByeDPI_Vpn_Service"
         private const val NOTIFICATION_ID = 103
         private const val TAG = "DpiVpnService"
@@ -130,7 +131,9 @@ class DpiVpnService : VpnService() {
             apps = intent.getStringArrayListExtra(EXTRA_APPS)?.toList().orEmpty(),
         )
         val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
-        val replaceAuthorized = intent.getBooleanExtra(EXTRA_REPLACE_AUTHORIZED, false)
+        val replacement = intent.getStringExtra(EXTRA_REPLACEMENT_SLOT)?.let { slotName ->
+            runCatching { VpnReplacement(confirmedSlot = VpnSlotState.valueOf(slotName)) }.getOrNull()
+        }
         if (args.isNullOrEmpty() || host.isBlank() || port !in 1..65535) {
             report(receiver, "invalid VPN engine configuration")
             terminate()
@@ -167,7 +170,7 @@ class DpiVpnService : VpnService() {
                 }
                 if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
                     ready = true
-                    startTunnel(receiver, routing, host, port, replaceAuthorized)
+                    startTunnel(receiver, routing, host, port, replacement)
                     return@thread
                 }
                 Thread.sleep(POLL_MS)
@@ -184,14 +187,15 @@ class DpiVpnService : VpnService() {
         routing: DpiVpnRouting,
         host: String,
         port: Int,
-        replaceAuthorized: Boolean,
+        replacement: VpnReplacement?,
     ) {
         try {
             // Immediately before establish: independently re-sample the slot and
-            // re-decide, so a raw (in-app) start intent cannot bypass an
-            // authorization that is no longer valid (foreign VPN appeared, the
-            // prepare grant was revoked, or lockdown became active).
-            val fresh = VpnStartPolicy.decide(AndroidVpnSlotSampler(this).sample(replaceAuthorized))
+            // re-decide with the attempt's replacement proof, so a raw (in-app)
+            // start intent cannot bypass an authorization that is no longer
+            // valid, and the proof is validated against the freshly observed
+            // slot (attempt identity is preserved here).
+            val fresh = VpnStartPolicy.decide(AndroidVpnSlotSampler(this).sample(), replacement)
             if (fresh !is VpnStartDecision.Start) {
                 report(receiver, "VPN authorization no longer valid: $fresh")
                 runCatching { proxy.stopProxy() }
@@ -212,9 +216,26 @@ class DpiVpnService : VpnService() {
                 appendLine("  udp: udp")
             }
             tunnelThread = thread(name = "HEV") {
-                TProxyService.startTunnel(tunnelConfig, fd.fd)
+                // startTunnel blocks in the native event loop until stopTunnel;
+                // a return without an explicit stop is a native failure/early
+                // exit, which must end the session so Running is never stale.
+                val code = TProxyService.startTunnel(tunnelConfig, fd.fd)
+                if (!stopping) {
+                    Log.w(TAG, "HEV tunnel exited without stop (code $code)")
+                    report(receiver, "HEV tunnel exited (code $code)")
+                    terminate()
+                }
             }
-            receiver?.send(RESULT_STARTED, Bundle())
+            // Give the tunnel a short grace to fail fast before claiming
+            // readiness: a surviving thread means the native event loop is
+            // running (genuine native readiness, as far as the HEV API exposes).
+            Thread.sleep(TUNNEL_READY_GRACE_MS)
+            if (tunnelThread?.isAlive == true) {
+                receiver?.send(RESULT_STARTED, Bundle())
+            } else {
+                report(receiver, "HEV tunnel failed to start")
+                terminate()
+            }
         } catch (e: Throwable) {
             Log.e(TAG, "VPN tunnel failed", e)
             report(receiver, "VPN tunnel failed: ${e.message ?: e.javaClass.simpleName}")

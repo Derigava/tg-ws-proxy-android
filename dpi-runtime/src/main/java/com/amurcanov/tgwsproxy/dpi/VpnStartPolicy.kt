@@ -5,7 +5,9 @@ package com.amurcanov.tgwsproxy.dpi
  * enumerate the owning app of an active VPN, so the adapter maps its best
  * evidence to this model: [FREE] when no VPN is active, [OURS] when we hold
  * the slot, [THIRD_PARTY] when another VPN is reliably identified, and
- * [UNKNOWN] when a VPN is active but its owner cannot be verified.
+ * [UNKNOWN] when a VPN is active but its owner cannot be verified (this is the
+ * production result for any visible foreign VPN, and also the fail-closed state
+ * when observation itself is unavailable).
  */
 enum class VpnSlotState { FREE, OURS, THIRD_PARTY, UNKNOWN }
 
@@ -25,19 +27,28 @@ enum class VpnRefuseReason {
 }
 
 /**
+ * Immutable, single-attempt proof that the user deliberately confirmed replacing
+ * the VPN observed at confirmation time. It is bound to [confirmedSlot] (the
+ * slot state observed when the confirmation was given), so the final service
+ * check can reject a start whose freshly re-sampled slot no longer matches.
+ *
+ * This is deliberately NOT a cached OS grant and NOT an unscoped Boolean: a
+ * cached `VpnService.prepare() == null` is ambient permission to use the VPN at
+ * all, never authorization to replace a specific active VPN.
+ */
+data class VpnReplacement(val confirmedSlot: VpnSlotState)
+
+/**
  * A single, immutable snapshot the VPN policy decides on.
  *
- * Two orthogonal facts drive the decision, and they must not be conflated:
- *  * [prepared] — the ambient OS grant (`VpnService.prepare()` returned null).
- *    This is a cached, user-level permission to use the VPN at all; it says
- *    nothing about whether the user agreed to replace *this* active VPN.
- *  * [replaceAuthorized] — a per-attempt, explicit authorization the user gave
- *    right now to replace the specific third-party VPN occupying the slot.
+ * [prepared] is the ambient OS grant (`VpnService.prepare()` returned null);
+ * [lockdown] is always-on/lockdown (best-effort, often unavailable). The
+ * deliberate replacement authorization is passed separately as [VpnReplacement]
+ * to [VpnStartPolicy.decide], because it must never be conflated with [prepared].
  */
 data class VpnStartRequest(
     val slot: VpnSlotState,
     val prepared: Boolean,
-    val replaceAuthorized: Boolean,
     val lockdown: Boolean = false,
 )
 
@@ -48,7 +59,7 @@ sealed interface VpnStartDecision {
 
     /**
      * Present the user a choice: switch to SOCKS5, replace the current VPN
-     * with explicit consent, or cancel. [ownerUncertain] is true when the
+     * with deliberate confirmation, or cancel. [ownerUncertain] is true when the
      * active VPN's owner could not be verified, so the UI must warn rather
      * than assume it is a third-party VPN.
      */
@@ -66,32 +77,34 @@ sealed interface VpnStartDecision {
  */
 object VpnStartPolicy {
     /**
-     * The conservative decision table:
+     * The conservative decision table (lockdown always wins):
      *
-     * | slot        | prepared | replaceAuthorized | lockdown | decision                        |
-     * |-------------|----------|-------------------|----------|---------------------------------|
-     * | FREE        | true     | -                 | false    | Start                           |
-     * | FREE        | false    | -                 | false    | Refuse(CONSENT_NOT_GRANTED)     |
-     * | OURS        | true     | -                 | false    | Start                           |
-     * | OURS        | false    | -                 | false    | Refuse(CONSENT_NOT_GRANTED)     |
-     * | THIRD_PARTY | -        | true              | false    | Start (explicit replacement)    |
-     * | THIRD_PARTY | -        | false             | false    | Offer(ownerUncertain=false)     |
-     * | UNKNOWN     | -        | -                 | false    | Offer(ownerUncertain=true)      |
-     * | any         | -        | -                 | true     | Refuse(LOCKDOWN)                |
+     * | slot        | prepared | replacement(confirmedSlot) | decision                        |
+     * |-------------|----------|---------------------------|---------------------------------|
+     * | FREE/OURS   | true     | (ignored)                 | Start                           |
+     * | FREE/OURS   | false    | (ignored)                 | Refuse(CONSENT_NOT_GRANTED)     |
+     * | THIRD_PARTY | true     | THIRD_PARTY               | Start (deliberate replacement)  |
+     * | THIRD_PARTY | *        | null / other              | Offer(ownerUncertain=false)     |
+     * | UNKNOWN     | true     | UNKNOWN                   | Start (deliberate replacement)  |
+     * | UNKNOWN     | *        | null / other              | Offer(ownerUncertain=true)      |
      *
-     * A cached OS grant ([prepared]) never authorizes replacing a third-party
-     * VPN — only an explicit, per-attempt [replaceAuthorized] does. UNKNOWN is
-     * never an automatic start: the owner cannot be verified, so the caller
-     * must present a conservative warning and require a fresh confirmation.
+     * Replacing a foreign VPN (THIRD_PARTY or UNKNOWN) requires BOTH a valid OS
+     * grant ([prepared]) AND a deliberate per-attempt proof bound to that slot.
+     * A cached OS grant alone never authorizes replacement, and a proof bound to
+     * a different slot is ignored (the freshly observed slot wins).
      */
-    fun decide(request: VpnStartRequest): VpnStartDecision {
+    fun decide(request: VpnStartRequest, replacement: VpnReplacement? = null): VpnStartDecision {
         if (request.lockdown) return VpnStartDecision.Refuse(VpnRefuseReason.LOCKDOWN)
 
         return when (request.slot) {
-            VpnSlotState.UNKNOWN -> VpnStartDecision.Offer(ownerUncertain = true)
+            VpnSlotState.UNKNOWN ->
+                if (request.prepared && replacement?.confirmedSlot == VpnSlotState.UNKNOWN) VpnStartDecision.Start
+                else VpnStartDecision.Offer(ownerUncertain = true)
+
             VpnSlotState.THIRD_PARTY ->
-                if (request.replaceAuthorized) VpnStartDecision.Start
+                if (request.prepared && replacement?.confirmedSlot == VpnSlotState.THIRD_PARTY) VpnStartDecision.Start
                 else VpnStartDecision.Offer(ownerUncertain = false)
+
             VpnSlotState.FREE, VpnSlotState.OURS ->
                 if (request.prepared) VpnStartDecision.Start
                 else VpnStartDecision.Refuse(VpnRefuseReason.CONSENT_NOT_GRANTED)

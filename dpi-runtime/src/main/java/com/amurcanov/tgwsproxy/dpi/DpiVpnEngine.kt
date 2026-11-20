@@ -21,9 +21,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * [NativeDpiEngine] uses), so a `Running(VPN)` controller state means a real,
  * confirmed VPN, not a delivered intent.
  *
- * [replaceAuthorized] is the per-attempt explicit replacement authorization the
- * caller sets after the user confirms replacing a third-party VPN; it is kept
- * separate from the OS prepare grant (which the authorizer samples fresh).
+ * [replacement] is the immutable, single-attempt [VpnReplacement] proof the
+ * caller mints via [VpnAuthorizer.confirmReplacement] after the user confirms.
+ * It is captured into a local before being serialized into the start intent and
+ * cleared only after that, so the service always receives the attempt's proof.
  */
 class DpiVpnEngine(
     private val context: Context,
@@ -32,13 +33,9 @@ class DpiVpnEngine(
 ) : DpiEngine {
     override var onExit: (() -> Unit)? = null
 
-    /**
-     * Per-attempt explicit authorization to replace a third-party VPN. Set by
-     * the caller right before a start, after the user confirms; it is consumed
-     * (reset to false) by the next [start], so a stale confirmation cannot
-     * authorize a later, different attempt.
-     */
-    var replaceAuthorized: Boolean = false
+    /** Immutable, single-attempt replacement proof; set by the caller before a start. */
+    @Volatile
+    var replacement: VpnReplacement? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -46,12 +43,10 @@ class DpiVpnEngine(
     private var generation = 0
 
     override fun start(config: DpiConfig): DpiEngineResult {
-        // Authorization + immediate recheck before touching the VPN slot. The
-        // per-attempt replacement confirmation is consumed here, so a stale
-        // confirmation can never authorize a later, different attempt.
-        val decision = authorizer.authorize(replaceAuthorized)
-        replaceAuthorized = false
+        val proof = replacement // capture the immutable proof for this attempt
+        val decision = authorizer.authorize(proof)
         if (decision !is VpnStartDecision.Start) {
+            replacement = null
             return DpiEngineResult.Failed(failureMessage(decision))
         }
 
@@ -77,13 +72,15 @@ class DpiVpnEngine(
                 .putStringArrayListExtra(DpiVpnService.EXTRA_ARGS, ArrayList(argv.toList()))
                 .putExtra(DpiVpnService.EXTRA_HOST, config.normalizedHost)
                 .putExtra(DpiVpnService.EXTRA_PORT, config.port)
-                .putExtra(DpiVpnService.EXTRA_REPLACE_AUTHORIZED, replaceAuthorized)
+                .putExtra(DpiVpnService.EXTRA_REPLACEMENT_SLOT, proof?.confirmedSlot?.name)
                 .putExtra(DpiVpnService.EXTRA_DNS, routing.dns)
                 .putExtra(DpiVpnService.EXTRA_IPV6, routing.ipv6)
                 .putExtra(DpiVpnService.EXTRA_APP_LIST_MODE, routing.appListMode.name)
                 .putStringArrayListExtra(DpiVpnService.EXTRA_APPS, ArrayList(routing.apps))
                 .putExtra(DpiVpnService.EXTRA_RESULT_RECEIVER, receiver)
         )
+        // Consume the proof only after it has been serialized into the intent.
+        replacement = null
         return runBlocking {
             withTimeoutOrNull(DpiVpnService.START_TIMEOUT_MS) { session.acknowledged.await() }
         } ?: DpiEngineResult.Failed("VPN not ready on ${config.normalizedHost}:${config.port}")
@@ -103,9 +100,9 @@ class DpiVpnEngine(
     private fun failureMessage(decision: VpnStartDecision): String = when (decision) {
         is VpnStartDecision.Offer ->
             if (decision.ownerUncertain) {
-                "VPN start needs user confirmation: an active VPN's owner could not be verified"
+                "VPN start needs deliberate confirmation: an active VPN's owner could not be verified"
             } else {
-                "VPN start needs user choice: another VPN is active"
+                "VPN start needs deliberate confirmation: another VPN is active"
             }
         is VpnStartDecision.Refuse -> when (decision.reason) {
             VpnRefuseReason.CONSENT_NOT_GRANTED -> "VPN permission not granted; obtain consent first"
