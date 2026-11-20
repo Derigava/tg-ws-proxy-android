@@ -274,20 +274,25 @@ class DpiVpnService : VpnService() {
             builder.setMetered(false)
         }
 
-        // Self-exclusion: both engines share our applicationId, so excluding
-        // our own package keeps the Telegram engine and the DPI engine's
-        // upstream sockets off the tunnel (and out of a forwarding loop).
-        builder.addDisallowedApplication(applicationContext.packageName)
-
-        when (routing.appListMode) {
-            VpnAppListMode.ALL_APPS -> Unit
-            VpnAppListMode.BLACKLIST -> routing.apps.forEach { pkg ->
-                runCatching { builder.addDisallowedApplication(pkg) }
-            }
-            VpnAppListMode.WHITELIST -> routing.apps.forEach { pkg ->
-                runCatching { builder.addAllowedApplication(pkg) }
-            }
-        }
+        val hostPackage = applicationContext.packageName
+        applyVpnApplicationRules(
+            routing, hostPackage,
+            addAllowed = { pkg ->
+                try {
+                    builder.addAllowedApplication(pkg)
+                    true
+                } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                    false
+                }
+            },
+            addDisallowed = { pkg ->
+                try {
+                    builder.addDisallowedApplication(pkg)
+                } catch (missing: android.content.pm.PackageManager.NameNotFoundException) {
+                    if (pkg == hostPackage) throw missing
+                }
+            },
+        )
 
         return builder.establish() ?: throw IllegalStateException("VPN connection failed")
     }
