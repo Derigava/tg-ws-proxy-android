@@ -190,6 +190,33 @@ class PermissionTests(unittest.TestCase):
             "io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
         })
 
+    def test_vpn_service_requires_protection_and_legacy_actions(self):
+        tree = '''
+E: manifest
+  E: application
+    E: service
+      A: android:name="com.amurcanov.tgwsproxy.dpi.DpiVpnService"
+      A: android:permission="android.permission.BIND_VPN_SERVICE"
+      A: android:exported=false
+      E: intent-filter
+        E: action
+          A: android:name="android.net.VpnService"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.ProxyShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.TOGGLE"
+'''
+        permissions.check_components(tree, "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "BIND_VPN_SERVICE"):
+            permissions.check_components(tree.replace("BIND_VPN_SERVICE", "INTERNET"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "TG actions"):
+            permissions.check_components(tree.replace("action.TOGGLE", "action.CHANGED"), "io.github.derigava.tgwsproxy")
+
     def test_expected_permissions_pass(self):
         permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")
 
