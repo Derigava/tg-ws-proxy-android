@@ -221,4 +221,7 @@
     <string name="dpi_strategy_udp">UDP</string>
     <string name="dpi_strategy_udp_fake_count">Количество поддельных UDP</string>
     <string name="dpi_strategy_editor">Стратегия ByeByeDPI</string>
+    <string name="dpi_cmd_use_command_line">Использовать командную строку</string>
+    <string name="dpi_cmd_args">Командная строка</string>
+    <string name="dpi_cmd_args_hint">Аргументы ciadpi, по одному в строке или через пробел</string>
 </resources>

@@ -46,6 +46,7 @@ import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.ui.dpi.DpiBackupActions
+import com.amurcanov.tgwsproxy.ui.dpi.DpiCommandEditor
 import com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyEditor
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -212,6 +213,8 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 checked = dpiBoot,
                 onCheckedChange = { enabled -> scope.launch { settingsStore.saveDpiAutoStartOnBoot(enabled) } },
             )
+            Spacer(Modifier.height(12.dp))
+            DpiCommandEditor()
             Spacer(Modifier.height(12.dp))
             DpiStrategyEditor()
             Spacer(Modifier.height(12.dp))
