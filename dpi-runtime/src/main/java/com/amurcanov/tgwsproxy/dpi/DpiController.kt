@@ -43,7 +43,12 @@ class DpiController(private val engine: DpiEngine) {
     fun start(config: DpiConfig) {
         synchronized(stateLock) {
             val current = _state.value
-            if (current is DpiState.Starting || current is DpiState.Running) return
+            // Reject while Starting/Running (already started) and while
+            // Stopping: a rapid re-start during stop cleanup must not queue a
+            // new session that could publish the previous engine's config or
+            // resurrect a stopped engine. The UI must wait for Off before a
+            // fresh start.
+            if (current is DpiState.Starting || current is DpiState.Running || current is DpiState.Stopping) return
             _state.value = DpiState.Starting
             deathDuringStart = false
         }
