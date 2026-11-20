@@ -83,7 +83,26 @@ internal class DpiSettingsStore(context: Context) {
             "whitelist" -> VpnAppListMode.WHITELIST
             else -> throw IllegalArgumentException("Invalid application filter")
         }
-        return DpiConnectionOptions(loopback, port, DpiVpnRouting(ipv6 = ipv6, appListMode = appList, apps = apps))
+        val dns = text("dns_ip", "").trim()
+        require(dns.isEmpty() || isNumericDnsAddress(dns)) { "DNS address must be numeric" }
+        return DpiConnectionOptions(loopback, port, DpiVpnRouting(dns = dns, ipv6 = ipv6, appListMode = appList, apps = apps))
+    }
+
+    private fun isNumericDnsAddress(value: String): Boolean {
+        if (':' in value) {
+            // Restrict the parser to numeric IPv6 syntax; never send a hostname to DNS.
+            if (!value.matches(Regex("[0-9a-fA-F:.]{2,45}"))) return false
+            return try {
+                java.net.InetAddress.getByName(value)
+                true
+            } catch (_: java.net.UnknownHostException) {
+                false
+            }
+        }
+        val octets = value.split('.')
+        return octets.size == 4 && octets.all { octet ->
+            octet.length in 1..3 && octet.all { it in '0'..'9' } && octet.toInt() <= 255
+        }
     }
 
     private fun JSONObject.section(name: String): Any? = if (isNull(name)) null else get(name)
