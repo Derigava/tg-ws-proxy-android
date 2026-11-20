@@ -211,7 +211,7 @@ fun ConnectionTab(
     }
 
     val onToggleDpi: () -> Unit = {
-        if (dpiIsActive) DpiSession.stop() else startDpi()
+        if (dpiIsActive) DpiSession.stop(context) else startDpi()
     }
 
     prepareConsentLauncher = rememberLauncherForActivityResult(VpnPrepareContract()) { granted ->

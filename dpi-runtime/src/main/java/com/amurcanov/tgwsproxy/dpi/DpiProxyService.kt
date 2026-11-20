@@ -56,6 +56,8 @@ class DpiProxyService : Service() {
 
     /** Stable per-process identity; a fresh process (after stop) gets a fresh Binder. */
     private val sessionBinder = Binder()
+    private val statusBinder by lazy { DpiRemoteSession.statusBinder({ endpoint to ready }, ::stop) }
+    private var endpoint: String? = null
     private val proxy by lazy { ByeDpiProxy() }
     private var engineThread: Thread? = null
 
@@ -86,7 +88,8 @@ class DpiProxyService : Service() {
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder = sessionBinder
+    override fun onBind(intent: Intent?): IBinder =
+        if (intent?.action == DpiRemoteSession.ACTION_STATUS) statusBinder else sessionBinder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -110,6 +113,7 @@ class DpiProxyService : Service() {
             return
         }
 
+        endpoint = dpiEndpoint(host, port)
         stopping = false
         ready = false
         engineError = null
@@ -156,6 +160,7 @@ class DpiProxyService : Service() {
     }
 
     private fun stop() {
+        endpoint = null
         stopping = true
         runCatching { proxy.stopProxy() }
         engineThread?.join(2_000)
@@ -223,7 +228,7 @@ class DpiProxyService : Service() {
     }
 
     override fun onDestroy() {
+        if (endpoint != null) stop()
         super.onDestroy()
-        runCatching { proxy.stopProxy() }
     }
 }

@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
 
@@ -49,12 +51,23 @@ open class DpiShortcutActivity : ComponentActivity() {
     }
 
     private fun applyAction(action: String) {
+        if (action == ACTION_STOP) {
+            DpiSession.stop(this)
+            finishQuietly()
+            return
+        }
+        lifecycleScope.launch {
+            DpiSession.awaitRestoration(this@DpiShortcutActivity)
+            applyStartOrToggle(action)
+        }
+    }
+
+    private fun applyStartOrToggle(action: String) {
         val state = DpiSession.state.value
         val active = state is DpiState.Running || state is DpiState.Starting
         when (action) {
             ACTION_START -> if (!active) DpiSession.start(this)
-            ACTION_STOP -> if (active) DpiSession.stop()
-            ACTION_TOGGLE -> if (active) DpiSession.stop() else DpiSession.start(this)
+            ACTION_TOGGLE -> if (active) DpiSession.stop(this) else DpiSession.start(this)
         }
         finishQuietly()
     }

@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DpiSession.initialize(this)
 
         
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
