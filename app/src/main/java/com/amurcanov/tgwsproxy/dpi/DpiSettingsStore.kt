@@ -14,6 +14,14 @@ internal data class DpiConnectionOptions(
 
 internal data class DpiCommand(val text: String, val pinned: Boolean = false, val name: String? = null)
 
+internal data class DpiDomainList(
+    val id: String,
+    val name: String,
+    val domains: List<String>,
+    val isActive: Boolean = true,
+    val isBuiltIn: Boolean = false,
+)
+
 /** Stores a validated v.1.8.2 exchange document, independently of TG settings. */
 internal class DpiSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences("dpi_document", Context.MODE_PRIVATE)
@@ -140,6 +148,53 @@ internal class DpiSettingsStore(context: Context) {
         check(preferences.edit().putString("backup", document().put("settings", JSONObject()).toString()).commit()) {
             "Could not reset ByeByeDPI settings"
         }
+    }
+
+    /** Domain lists (parity T-06), stored in the document's `domainLists` section. */
+    fun domainLists(): List<DpiDomainList> {
+        val lists = JSONObject(exportJson()).optJSONArray("domainLists") ?: return emptyList()
+        return (0 until lists.length()).map { index ->
+            val record = lists.getJSONObject(index)
+            DpiDomainList(
+                record.getString("id"),
+                record.getString("name"),
+                (0 until record.getJSONArray("domains").length()).map { record.getJSONArray("domains").getString(it) },
+                record.optBoolean("isActive", true),
+                record.optBoolean("isBuiltIn", false),
+            )
+        }
+    }
+
+    fun addDomainList(name: String, domains: List<String>) {
+        val id = name.lowercase().replace(" ", "_")
+        mutateDomainLists { current ->
+            if (current.any { it.id == id }) current
+            else current + DpiDomainList(id, name, domains.filter { it.isNotBlank() }, isActive = true)
+        }
+    }
+
+    fun updateDomainList(id: String, name: String, domains: List<String>) =
+        mutateDomainLists { current -> current.map { if (it.id == id) it.copy(name = name, domains = domains.filter { it.isNotBlank() }) else it } }
+
+    fun deleteDomainList(id: String) =
+        mutateDomainLists { current -> current.filterNot { it.id == id } }
+
+    private fun mutateDomainLists(transform: (List<DpiDomainList>) -> List<DpiDomainList>) {
+        val document = JSONObject(exportJson())
+        val next = transform(domainLists())
+        val array = org.json.JSONArray()
+        next.forEach { list ->
+            val domains = org.json.JSONArray()
+            list.domains.forEach { domains.put(it) }
+            array.put(org.json.JSONObject()
+                .put("id", list.id)
+                .put("name", list.name)
+                .put("domains", domains)
+                .put("isActive", list.isActive)
+                .put("isBuiltIn", list.isBuiltIn))
+        }
+        document.put("domainLists", array)
+        check(preferences.edit().putString("backup", document.toString()).commit()) { "Could not save ByeByeDPI domain lists" }
     }
 
     private fun mutateHistory(transform: (List<DpiCommand>) -> List<DpiCommand>) {

@@ -199,4 +199,16 @@ class DpiSettingsStoreTest {
         assertFalse(document.has("apps"))
         assertEquals(listOf("-o1", "-a1", "-r-5+se"), store.connectionOptions().args)
     }
+
+    @Test fun domainListsAddUpdateDelete() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        store.addDomainList("Blocked", listOf("a.com", "b.org"))
+        val list = store.domainLists().single()
+        assertEquals("blocked", list.id)
+        assertEquals(listOf("a.com", "b.org"), list.domains)
+        store.updateDomainList("blocked", "Blocked sites", listOf("c.net"))
+        assertEquals(listOf("c.net"), store.domainLists().single().domains)
+        store.deleteDomainList("blocked")
+        assertTrue(store.domainLists().isEmpty())
+    }
 }
