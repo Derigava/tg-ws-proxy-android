@@ -23,6 +23,8 @@ import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
 import com.amurcanov.tgwsproxy.ui.MonoAction
 import com.amurcanov.tgwsproxy.ui.MonoLabel
 import com.amurcanov.tgwsproxy.ui.SectionLabel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Strategy history list (parity C-03/C-04): apply, pin/unpin, delete and clear
@@ -33,6 +35,7 @@ import com.amurcanov.tgwsproxy.ui.SectionLabel
 internal fun DpiStrategyList() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var revision by remember { mutableStateOf(0) }
     val commands = remember(revision) { store.history() }
 
@@ -40,10 +43,14 @@ internal fun DpiStrategyList() {
 
     fun apply(command: DpiCommand) {
         store.applyStrategy(command.text)
-        if (DpiSession.state.value is com.amurcanov.tgwsproxy.dpi.DpiState.Running ||
+        val wasRunning = DpiSession.state.value is com.amurcanov.tgwsproxy.dpi.DpiState.Running ||
             DpiSession.state.value is com.amurcanov.tgwsproxy.dpi.DpiState.Starting
-        ) {
+        if (wasRunning) {
             DpiSession.stop()
+            scope.launch {
+                DpiSession.state.first { it is com.amurcanov.tgwsproxy.dpi.DpiState.Off || it is com.amurcanov.tgwsproxy.dpi.DpiState.Failed }
+                DpiSession.start(context)
+            }
         }
         refresh()
     }
