@@ -60,6 +60,19 @@ class DpiControllerTest {
         }
     }
 
+    /** Test double whose session dies during start, before Ready is published. */
+    private class DeathDuringStartEngine : DpiEngine {
+        override var onExit: (() -> Unit)? = null
+
+        override fun start(config: DpiConfig): DpiEngineResult {
+            // The engine process dies during startup; a stale Running still comes back.
+            onExit?.invoke()
+            return DpiEngineResult.Running
+        }
+
+        override fun stop() = Unit
+    }
+
     @Test
     fun startWithOccupiedPortReportsFailedNotRunning() {
         val occupied = ServerSocket(0)
@@ -152,6 +165,16 @@ class DpiControllerTest {
             controller.state.first { it is DpiState.Failed || it is DpiState.Off }
         }
         assertTrue("expected Failed after death, got $state", state is DpiState.Failed)
+    }
+
+    @Test
+    fun deathDuringStartupReconcilesToFailedNotRunning() {
+        val controller = DpiController(DeathDuringStartEngine())
+        controller.start(DpiConfig(mode = DpiMode.SOCKS5, host = "127.0.0.1", port = 1080))
+        val state = runBlocking {
+            controller.state.first { it is DpiState.Failed || it is DpiState.Running }
+        }
+        assertTrue("death during startup must not yield Running, got $state", state is DpiState.Failed)
     }
 
     @Test

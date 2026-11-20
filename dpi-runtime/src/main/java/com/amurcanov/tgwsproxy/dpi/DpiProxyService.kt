@@ -26,22 +26,24 @@ import kotlin.concurrent.thread
  * `:dpi` process. Commands are private (the service is not exported) and use a
  * namespace distinct from the Telegram proxy's.
  *
- * Start is acknowledged positively only when this service's own engine thread
- * has bound the listener (a foreign SOCKS5 responder can never satisfy it), and
- * the engine thread reports failures so the controller never sees a false
- * Running. Every stop ends the process to give the next start fresh native
- * globals (the pinned engine keeps sticky `proxy_started`/`params` statics).
+ * The service sends its Binder token back with a session acknowledgment before
+ * the engine is ready, so the caller can watch for process death during startup;
+ * it acknowledges STARTED only on the native-owned listener signal (our engine
+ * called listen() after a successful bind). Every stop ends the process to give
+ * the next start fresh native globals (the pinned engine keeps sticky
+ * `proxy_started`/`params` statics).
  */
 class DpiProxyService : Service() {
     companion object {
         const val ACTION_START = "io.github.derigava.tgwsproxy.dpi.START"
         const val ACTION_STOP = "io.github.derigava.tgwsproxy.dpi.STOP"
-        const val ACTION_BIND = "io.github.derigava.tgwsproxy.dpi.BIND"
         const val EXTRA_ARGS = "EXTRA_ARGS"
         const val EXTRA_HOST = "EXTRA_HOST"
         const val EXTRA_PORT = "EXTRA_PORT"
         const val EXTRA_RESULT_RECEIVER = "EXTRA_RESULT_RECEIVER"
+        const val EXTRA_BINDER = "EXTRA_BINDER"
         const val EXTRA_ERROR = "EXTRA_ERROR"
+        const val RESULT_SESSION = 3
         const val RESULT_STARTED = 1
         const val RESULT_FAILED = 2
         const val START_TIMEOUT_MS = 10_000L
@@ -52,7 +54,8 @@ class DpiProxyService : Service() {
         private const val TAG = "DpiProxyService"
     }
 
-    private val binder = Binder()
+    /** Stable per-process identity; a fresh process (after stop) gets a fresh Binder. */
+    private val sessionBinder = Binder()
     private val proxy by lazy { ByeDpiProxy() }
     private var engineThread: Thread? = null
 
@@ -83,7 +86,7 @@ class DpiProxyService : Service() {
         }
     }
 
-    override fun onBind(intent: Intent?): IBinder = binder
+    override fun onBind(intent: Intent?): IBinder = sessionBinder
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -110,6 +113,9 @@ class DpiProxyService : Service() {
         stopping = false
         ready = false
         engineError = null
+        // Publish the session identity immediately so the caller can establish
+        // death monitoring before the engine is ready.
+        receiver?.send(RESULT_SESSION, Bundle().apply { putBinder(EXTRA_BINDER, sessionBinder) })
         startForeground(notification(getString(R.string.dpi_notification_running)))
 
         engineThread = thread(name = "ByeDPI") {
@@ -120,10 +126,8 @@ class DpiProxyService : Service() {
                 Log.e(TAG, "ByeDPI engine failed", e)
                 engineError = "engine exception: ${e.message ?: e.javaClass.simpleName}"
             }
-            // The engine stopped on its own after the controller was told it was
-            // ready: end the process so the main process's binder-death callback
-            // fires and the controller leaves Running. A deliberate stop already
-            // set `stopping` and handles cleanup itself.
+            // Engine stopped on its own after being reported ready: end the
+            // process so the caller's binder-death callback fires.
             if (!stopping && ready) terminate()
         }
 
@@ -136,7 +140,9 @@ class DpiProxyService : Service() {
                     terminate()
                     return@thread
                 }
-                if (engineThread?.isAlive == true && socks5Ready(host, port)) {
+                // Positive ownership: OUR engine called listen() (native signal)
+                // and answers the SOCKS5 handshake.
+                if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
                     ready = true
                     receiver?.send(RESULT_STARTED, Bundle())
                     return@thread

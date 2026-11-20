@@ -1,9 +1,7 @@
 package com.amurcanov.tgwsproxy.dpi
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
@@ -16,34 +14,37 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Real [DpiEngine]: starts [DpiProxyService] in the `:dpi` process and waits for
- * a positive, session-scoped acknowledgment. The service only acknowledges
- * STARTED after its own engine thread has bound the listener (so a foreign
- * SOCKS5 responder on the same port can never be mistaken for us). After a
- * successful start the engine binds to the service to observe process death and
- * forwards it through [onExit], so a dead session never leaves Running.
+ * a positive, session-scoped acknowledgment. The service sends its Binder token
+ * first (so death monitoring is established before Ready) and acknowledges
+ * STARTED only on the native-owned listener signal — a foreign SOCKS5 responder
+ * can never be mistaken for us. A generation counter scopes every acknowledgment
+ * and death event to the current session, so a stale exit from a previous
+ * session can never change a new one.
  */
 class NativeDpiEngine(private val context: Context) : DpiEngine {
     override var onExit: (() -> Unit)? = null
 
-    private val deathRecipient = IBinder.DeathRecipient { onExit?.invoke() }
-    private var connection: ServiceConnection? = null
-    private var bound = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var generation = 0
 
     override fun start(config: DpiConfig): DpiEngineResult {
         if (!config.isLoopback) {
             return DpiEngineResult.Failed("SOCKS5 bind host must be loopback, got ${config.host}")
         }
+        val myGeneration = ++generation
         val argv = config.toArgv()
-        val acknowledged = CompletableDeferred<DpiEngineResult>()
-        val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+        val session = StartSession(myGeneration)
+        val receiver = object : ResultReceiver(mainHandler) {
             override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                if (myGeneration != generation) return // stale session
                 when (resultCode) {
-                    DpiProxyService.RESULT_STARTED -> acknowledged.complete(DpiEngineResult.Running)
-                    DpiProxyService.RESULT_FAILED -> acknowledged.complete(
-                        DpiEngineResult.Failed(
-                            resultData?.getString(DpiProxyService.EXTRA_ERROR) ?: "engine failed to start"
-                        )
-                    )
+                    DpiProxyService.RESULT_SESSION ->
+                        session.onSession(resultData?.getBinder(DpiProxyService.EXTRA_BINDER))
+                    DpiProxyService.RESULT_STARTED -> session.onReady()
+                    DpiProxyService.RESULT_FAILED ->
+                        session.onFailure(resultData?.getString(DpiProxyService.EXTRA_ERROR) ?: "engine failed to start")
                 }
             }
         }
@@ -57,15 +58,15 @@ class NativeDpiEngine(private val context: Context) : DpiEngine {
                 .putExtra(DpiProxyService.EXTRA_RESULT_RECEIVER, receiver)
         )
         val outcome = runBlocking {
-            withTimeoutOrNull(DpiProxyService.START_TIMEOUT_MS) { acknowledged.await() }
+            withTimeoutOrNull(DpiProxyService.START_TIMEOUT_MS) { session.acknowledged.await() }
         } ?: DpiEngineResult.Failed("SOCKS5 proxy not ready on ${config.normalizedHost}:${config.port}")
-
-        if (outcome is DpiEngineResult.Running) bindForDeathDetection()
         return outcome
     }
 
     override fun stop() {
-        unbind()
+        // Invalidate the current session before ending it, so its death cannot
+        // fire onExit and a stale exit cannot leak into the next session.
+        generation++
         runCatching {
             context.startService(
                 Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_STOP)
@@ -73,46 +74,53 @@ class NativeDpiEngine(private val context: Context) : DpiEngine {
         }
     }
 
-    private fun bindForDeathDetection() {
-        if (bound) return
-        bound = true
-        val conn = object : ServiceConnection {
-            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-                if (service == null) {
-                    onExit?.invoke()
-                    return
-                }
-                try {
-                    service.linkToDeath(deathRecipient, 0)
-                } catch (e: Exception) {
-                    onExit?.invoke()
-                }
+    /**
+     * One start attempt. All methods run on the main thread (acknowledgments via
+     * [ResultReceiver] and death via a posted [IBinder.DeathRecipient]), so its
+     * state needs no extra synchronization.
+     */
+    private inner class StartSession(private val myGeneration: Int) {
+        val acknowledged = CompletableDeferred<DpiEngineResult>()
+        private var deathRecorded = false
+        private var ready = false
+
+        private val deathRecipient = IBinder.DeathRecipient {
+            mainHandler.post {
+                if (myGeneration == generation) onDeath()
             }
-
-            override fun onServiceDisconnected(name: ComponentName?) { onExit?.invoke() }
-
-            override fun onBindingDied(name: ComponentName?) { onExit?.invoke() }
-
-            override fun onNullBinding(name: ComponentName?) { onExit?.invoke() }
         }
-        connection = conn
-        runCatching {
-            context.bindService(
-                Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_BIND),
-                conn,
-                Context.BIND_AUTO_CREATE,
-            )
-        }.onFailure {
-            bound = false
-            connection = null
-            onExit?.invoke()
-        }
-    }
 
-    private fun unbind() {
-        if (!bound) return
-        bound = false
-        connection?.let { runCatching { context.unbindService(it) } }
-        connection = null
+        fun onSession(binder: IBinder?) {
+            if (binder == null) {
+                deathRecorded = true
+                return
+            }
+            try {
+                binder.linkToDeath(deathRecipient, 0)
+            } catch (e: Exception) {
+                // The service died between sending its token and this link.
+                deathRecorded = true
+            }
+        }
+
+        fun onReady() {
+            ready = true
+            if (deathRecorded) {
+                acknowledged.complete(DpiEngineResult.Failed("engine exited during startup"))
+            } else {
+                acknowledged.complete(DpiEngineResult.Running)
+            }
+        }
+
+        fun onFailure(reason: String) {
+            acknowledged.complete(DpiEngineResult.Failed(reason))
+        }
+
+        fun onDeath() {
+            // Main thread. If Ready was already published, the controller is
+            // told to leave Running; otherwise the death is reconciled before
+            // onReady can publish Running.
+            if (ready) onExit?.invoke() else deathRecorded = true
+        }
     }
 }
