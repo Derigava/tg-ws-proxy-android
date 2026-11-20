@@ -110,9 +110,12 @@ object DpiSession {
         val options = try {
             DpiSettingsStore(context).connectionOptions()
         } catch (_: Exception) {
-            val failure = DpiState.Failed(context.getString(R.string.dpi_backup_error))
-            journalState(context, failure)
-            _state.value = failure
+            journal.update {
+                (it + LogEntry(
+                    "dpi-${nextLogId++}", context.getString(R.string.dpi_backup_error), 1,
+                    isError = true, priority = 6,
+                )).takeLast(50)
+            }
             return
         }
         val hostLabel = if (':' in options.host) "[${options.host}]" else options.host
