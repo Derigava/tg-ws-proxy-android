@@ -126,7 +126,9 @@ class DpiVpnService : VpnService() {
             ACTION_START -> start(intent)
             ACTION_STOP -> stop()
             ACTION_CANCEL -> cancel(intent, startId)
-            else -> stopSelfResult(startId)
+            // API 24–26 ignore the manifest opt-out and can still deliver this action.
+            // Only the in-app START command includes a configuration and consent proof.
+            else -> if (activeAttemptId == null) stopSelfResult(startId)
         }
         // No automatic restart: a VPN that the user (or system) stopped must
         // stay stopped until an explicit, policy-gated start.
