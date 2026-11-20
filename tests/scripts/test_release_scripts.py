@@ -210,12 +210,23 @@ E: manifest
           A: android:name="io.github.derigava.tgwsproxy.action.STOP"
         E: action
           A: android:name="io.github.derigava.tgwsproxy.action.TOGGLE"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.DpiShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.TOGGLE"
 '''
         permissions.check_components(tree, "io.github.derigava.tgwsproxy")
         with self.assertRaisesRegex(ValueError, "BIND_VPN_SERVICE"):
             permissions.check_components(tree.replace("BIND_VPN_SERVICE", "INTERNET"), "io.github.derigava.tgwsproxy")
         with self.assertRaisesRegex(ValueError, "TG actions"):
             permissions.check_components(tree.replace("action.TOGGLE", "action.CHANGED"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "ByeByeDPI actions"):
+            permissions.check_components(tree.replace("action.dpi.TOGGLE", "action.dpi.CHANGED"), "io.github.derigava.tgwsproxy")
 
     def test_expected_permissions_pass(self):
         permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")

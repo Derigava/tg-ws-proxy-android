@@ -251,4 +251,7 @@
     <string name="dpi_app_filter_whitelist">Только выбранные</string>
     <string name="dpi_change_strategy">Сменить стратегию</string>
     <string name="dpi_change_strategy_empty">Закреплённых стратегий пока нет</string>
+    <string name="dpi_shortcut_start">Запустить ByeByeDPI</string>
+    <string name="dpi_shortcut_stop">Остановить ByeByeDPI</string>
+    <string name="dpi_shortcut_toggle">Переключить ByeByeDPI</string>
 </resources>
