@@ -1,63 +1,118 @@
 package com.amurcanov.tgwsproxy.dpi
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
+import android.os.Bundle
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.ResultReceiver
 import androidx.core.content.ContextCompat
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Real [DpiEngine]: starts the [DpiProxyService] in the `:dpi` process and
- * confirms readiness with a SOCKS5 handshake against the loopback endpoint.
- * A returned [DpiEngineResult.Running] therefore means the engine bound its
- * port and answers the handshake — not merely that the start intent was sent.
+ * Real [DpiEngine]: starts [DpiProxyService] in the `:dpi` process and waits for
+ * a positive, session-scoped acknowledgment. The service only acknowledges
+ * STARTED after its own engine thread has bound the listener (so a foreign
+ * SOCKS5 responder on the same port can never be mistaken for us). After a
+ * successful start the engine binds to the service to observe process death and
+ * forwards it through [onExit], so a dead session never leaves Running.
  */
 class NativeDpiEngine(private val context: Context) : DpiEngine {
-    companion object {
-        private const val START_TIMEOUT_MS = 10_000L
-        private const val PROBE_TIMEOUT_MS = 250
-        private const val POLL_MS = 50L
-    }
+    override var onExit: (() -> Unit)? = null
+
+    private val deathRecipient = IBinder.DeathRecipient { onExit?.invoke() }
+    private var connection: ServiceConnection? = null
+    private var bound = false
 
     override fun start(config: DpiConfig): DpiEngineResult {
+        if (!config.isLoopback) {
+            return DpiEngineResult.Failed("SOCKS5 bind host must be loopback, got ${config.host}")
+        }
         val argv = config.toArgv()
+        val acknowledged = CompletableDeferred<DpiEngineResult>()
+        val receiver = object : ResultReceiver(Handler(Looper.getMainLooper())) {
+            override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+                when (resultCode) {
+                    DpiProxyService.RESULT_STARTED -> acknowledged.complete(DpiEngineResult.Running)
+                    DpiProxyService.RESULT_FAILED -> acknowledged.complete(
+                        DpiEngineResult.Failed(
+                            resultData?.getString(DpiProxyService.EXTRA_ERROR) ?: "engine failed to start"
+                        )
+                    )
+                }
+            }
+        }
         ContextCompat.startForegroundService(
             context,
             Intent(context, DpiProxyService::class.java)
                 .setAction(DpiProxyService.ACTION_START)
                 .putStringArrayListExtra(DpiProxyService.EXTRA_ARGS, ArrayList(argv.toList()))
+                .putExtra(DpiProxyService.EXTRA_HOST, config.normalizedHost)
+                .putExtra(DpiProxyService.EXTRA_PORT, config.port)
+                .putExtra(DpiProxyService.EXTRA_RESULT_RECEIVER, receiver)
         )
-        val address = probeAddress(config.host)
-        val deadline = System.currentTimeMillis() + START_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (socks5Ready(address, config.port)) return DpiEngineResult.Running
-            Thread.sleep(POLL_MS)
-        }
-        return DpiEngineResult.Failed("SOCKS5 proxy not ready on ${config.host}:${config.port}")
+        val outcome = runBlocking {
+            withTimeoutOrNull(DpiProxyService.START_TIMEOUT_MS) { acknowledged.await() }
+        } ?: DpiEngineResult.Failed("SOCKS5 proxy not ready on ${config.normalizedHost}:${config.port}")
+
+        if (outcome is DpiEngineResult.Running) bindForDeathDetection()
+        return outcome
     }
 
     override fun stop() {
-        context.startService(
-            Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_STOP)
-        )
-    }
-
-    private fun probeAddress(host: String): String = when (host) {
-        "0.0.0.0" -> "127.0.0.1"
-        "::", "[::]" -> "::1"
-        else -> host.removeSurrounding("[", "]")
-    }
-
-    private fun socks5Ready(host: String, port: Int): Boolean = try {
-        Socket().use { socket ->
-            socket.connect(InetSocketAddress(host, port), PROBE_TIMEOUT_MS)
-            socket.soTimeout = PROBE_TIMEOUT_MS
-            socket.getOutputStream().write(byteArrayOf(5, 1, 0))
-            val input = socket.getInputStream()
-            input.read() == 5 && input.read() == 0
+        unbind()
+        runCatching {
+            context.startService(
+                Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_STOP)
+            )
         }
-    } catch (e: IOException) {
-        false
+    }
+
+    private fun bindForDeathDetection() {
+        if (bound) return
+        bound = true
+        val conn = object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                if (service == null) {
+                    onExit?.invoke()
+                    return
+                }
+                try {
+                    service.linkToDeath(deathRecipient, 0)
+                } catch (e: Exception) {
+                    onExit?.invoke()
+                }
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) { onExit?.invoke() }
+
+            override fun onBindingDied(name: ComponentName?) { onExit?.invoke() }
+
+            override fun onNullBinding(name: ComponentName?) { onExit?.invoke() }
+        }
+        connection = conn
+        runCatching {
+            context.bindService(
+                Intent(context, DpiProxyService::class.java).setAction(DpiProxyService.ACTION_BIND),
+                conn,
+                Context.BIND_AUTO_CREATE,
+            )
+        }.onFailure {
+            bound = false
+            connection = null
+            onExit?.invoke()
+        }
+    }
+
+    private fun unbind() {
+        if (!bound) return
+        bound = false
+        connection?.let { runCatching { context.unbindService(it) } }
+        connection = null
     }
 }

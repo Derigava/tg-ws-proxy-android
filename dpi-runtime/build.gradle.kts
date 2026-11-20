@@ -1,32 +1,7 @@
 import java.io.File
-import java.util.Properties
 
 plugins {
     id("com.android.library")
-}
-
-// The native build needs both the NDK and CMake from the SDK. They are present
-// on the Linux CI image but absent on the Windows workstation used for smoke
-// tests, so the CMake build is registered only when the toolchain exists. This
-// keeps `:app:testEmulatorDebugUnitTest` and JVM unit tests runnable without a
-// system-level install, while Linux still packages libbyedpi.so for both ABIs.
-fun sdkDir(): File? {
-    val localProps = rootProject.file("local.properties")
-    if (localProps.exists()) {
-        Properties().apply { localProps.inputStream().use { load(it) } }
-            .getProperty("sdk.dir")?.let { return File(it) }
-    }
-    System.getenv("ANDROID_HOME")?.let { return File(it) }
-    System.getenv("ANDROID_SDK_ROOT")?.let { return File(it) }
-    return null
-}
-
-fun nativeSdkComponentsAvailable(): Boolean {
-    val sdk = sdkDir() ?: return false
-    val ndk = File(sdk, "ndk")
-    val cmake = File(sdk, "cmake")
-    return ndk.isDirectory && ndk.listFiles().orEmpty().any { it.isDirectory } &&
-        cmake.isDirectory && cmake.listFiles().orEmpty().any { it.isDirectory }
 }
 
 android {
@@ -42,11 +17,13 @@ android {
         }
     }
 
-    if (nativeSdkComponentsAvailable()) {
-        externalNativeBuild {
-            cmake {
-                path = file("src/main/cpp/CMakeLists.txt")
-            }
+    // Always registered: the native engine is required for any packaged APK, so
+    // assemble*/bundle* fail loudly when the NDK/CMake toolchain is absent (Linux
+    // CI has both). Pure JVM test tasks do not depend on the native build, so
+    // `testDebugUnitTest` still runs on a workstation without the toolchain.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
         }
     }
 

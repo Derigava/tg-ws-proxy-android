@@ -11,7 +11,22 @@ data class DpiConfig(
     val port: Int = 1080,
     val args: List<String> = emptyList(),
 ) {
+    /** True only for loopback (or a wildcard we coerce to loopback) addresses. */
+    val isLoopback: Boolean
+        get() = when (host.removeSurrounding("[", "]")) {
+            "127.0.0.1", "::1", "0.0.0.0", "::" -> true
+            else -> false
+        }
+
+    /** Loopback address to actually bind: wildcards are narrowed to the loopback interface. */
+    val normalizedHost: String
+        get() = when (host.removeSurrounding("[", "]")) {
+            "0.0.0.0" -> "127.0.0.1"
+            "::" -> "::1"
+            else -> host
+        }
+
     /** Full native argv, mirroring the upstream `ciadpi` invocation. */
     fun toArgv(): Array<String> =
-        (listOf("ciadpi", "--ip", host, "--port", port.toString()) + args).toTypedArray()
+        (listOf("ciadpi", "--ip", normalizedHost, "--port", port.toString()) + args).toTypedArray()
 }
