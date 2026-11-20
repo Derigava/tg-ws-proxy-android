@@ -60,6 +60,35 @@ internal class DpiSettingsStore(context: Context) {
 
     fun connectionOptions(): DpiConnectionOptions = connectionOptions(JSONObject(exportJson()))
 
+    /** Raw settings map for the editor; values are String/Number/Boolean. */
+    fun currentSettings(): Map<String, Any?> {
+        val settings = JSONObject(exportJson()).optJSONObject("settings") ?: return emptyMap()
+        return settings.keys().asSequence().associateWith { settings.get(it) }
+    }
+
+    /**
+     * Merges validated strategy/settings values into the stored document and
+     * re-validates the whole document before committing. A value of `null`
+     * removes the key. Unknown keys and invalid values are rejected without
+     * changing the stored document.
+     */
+    fun updateSettings(fields: Map<String, Any?>) {
+        val current = JSONObject(exportJson())
+        val settings = current.optJSONObject("settings") ?: JSONObject().also { current.put("settings", it) }
+        for ((key, value) in fields) {
+            require(key in SETTINGS_KEYS) { "Unknown setting: $key" }
+            if (value == null) {
+                settings.remove(key)
+            } else {
+                require(value is String || value is Number || value is Boolean ||
+                    (value is JSONArray && value.isStringArray())) { "Invalid value for $key" }
+                settings.put(key, value)
+            }
+        }
+        connectionOptions(current)
+        check(preferences.edit().putString("backup", current.toString()).commit()) { "Could not save ByeByeDPI document" }
+    }
+
     private fun connectionOptions(snapshot: JSONObject): DpiConnectionOptions {
         val settings = snapshot.optJSONObject("settings") ?: JSONObject()
         fun text(key: String, default: String): String = settings.section(key)?.let {

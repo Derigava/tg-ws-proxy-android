@@ -112,6 +112,19 @@ class DualModuleControlsTest {
     }
 
     @Test
+    fun strategyEditorPersistsDesyncMethodChoice() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = com.amurcanov.tgwsproxy.dpi.DpiSettingsStore(context)
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        composeRule.setContent {
+            TgWsProxyTheme { com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyEditor() }
+        }
+        composeRule.onNodeWithText("split").performClick()
+        composeRule.waitForIdle()
+        assertEquals("split", store.currentSettings()["byedpi_desync_method"])
+    }
+
+    @Test
     fun changingLogSourceHidesTelegramEntries() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val logs = com.amurcanov.tgwsproxy.LogManager.logs

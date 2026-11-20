@@ -189,4 +189,19 @@
     <string name="dpi_backup_imported">Копия сохранена. Адрес SOCKS5 и фильтр приложений VPN применятся при следующем запуске.</string>
     <string name="dpi_backup_exported">Копия экспортирована</string>
     <string name="dpi_backup_error">Не удалось прочитать или записать копию ByeByeDPI</string>
+    <string name="dpi_strategy_desync">Метод десинхронизации</string>
+    <string name="dpi_strategy_split">Разделение</string>
+    <string name="dpi_strategy_split_position">Позиция разделения</string>
+    <string name="dpi_strategy_split_at_host">Разделить в хосте</string>
+    <string name="dpi_strategy_protocols">Протоколы</string>
+    <string name="dpi_strategy_desync_http">Десинхронизация HTTP</string>
+    <string name="dpi_strategy_desync_https">Десинхронизация HTTPS</string>
+    <string name="dpi_strategy_desync_udp">Десинхронизация UDP</string>
+    <string name="dpi_strategy_hosts">Хосты</string>
+    <string name="dpi_strategy_other">Прочее</string>
+    <string name="dpi_strategy_default_ttl">TTL по умолчанию</string>
+    <string name="dpi_strategy_no_domain">Без домена</string>
+    <string name="dpi_strategy_tcp_fast_open">TCP Fast Open</string>
+    <string name="dpi_strategy_drop_sack">Отбрасывать SACK</string>
+    <string name="dpi_strategy_editor">Стратегия ByeByeDPI</string>
 </resources>
