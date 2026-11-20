@@ -12,6 +12,8 @@ internal data class DpiConnectionOptions(
     val args: List<String> = emptyList(),
 )
 
+internal data class DpiCommand(val text: String, val pinned: Boolean = false, val name: String? = null)
+
 /** Stores a validated v.1.8.2 exchange document, independently of TG settings. */
 internal class DpiSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences("dpi_document", Context.MODE_PRIVATE)
@@ -87,6 +89,65 @@ internal class DpiSettingsStore(context: Context) {
         }
         connectionOptions(current)
         check(preferences.edit().putString("backup", current.toString()).commit()) { "Could not save ByeByeDPI document" }
+    }
+
+    /** Strategy history (parity C-03..C-05), stored in the document's `history` section. */
+    fun history(): List<DpiCommand> {
+        val document = JSONObject(exportJson())
+        val history = document.optJSONArray("history") ?: return emptyList()
+        return (0 until history.length()).map { index ->
+            val record = history.getJSONObject(index)
+            DpiCommand(record.getString("text"), record.optBoolean("pinned"), record.optString("name").ifBlank { null })
+        }
+    }
+
+    fun pinnedHistory(): List<DpiCommand> = history().filter { it.pinned }
+
+    fun addCommand(command: String) {
+        if (command.isBlank()) return
+        mutateHistory { current ->
+            if (current.any { it.text == command }) current
+            else {
+                val next = (listOf(DpiCommand(command)) + current).toMutableList()
+                while (next.size > MAX_HISTORY) {
+                    val lastUnpinned = next.indexOfLast { !it.pinned }
+                    if (lastUnpinned >= 0) next.removeAt(lastUnpinned) else next.removeAt(next.size - 1)
+                }
+                next
+            }
+        }
+    }
+
+    fun pinCommand(command: String) = mutateHistory { current -> current.map { if (it.text == command) it.copy(pinned = true) else it } }
+
+    fun unpinCommand(command: String) = mutateHistory { current -> current.map { if (it.text == command) it.copy(pinned = false) else it } }
+
+    fun deleteCommand(command: String) = mutateHistory { current -> current.filterNot { it.text == command } }
+
+    fun renameCommand(command: String, name: String) = mutateHistory { current -> current.map { if (it.text == command) it.copy(name = name) else it } }
+
+    fun clearUnpinnedHistory() = mutateHistory { current -> current.filter { it.pinned } }
+
+    private fun mutateHistory(transform: (List<DpiCommand>) -> List<DpiCommand>) {
+        val document = JSONObject(exportJson())
+        val next = transform(historyFrom(document))
+        val array = org.json.JSONArray()
+        next.forEach { command ->
+            array.put(org.json.JSONObject()
+                .put("text", command.text)
+                .put("pinned", command.pinned)
+                .put("name", command.name ?: org.json.JSONObject.NULL))
+        }
+        document.put("history", array)
+        check(preferences.edit().putString("backup", document.toString()).commit()) { "Could not save ByeByeDPI history" }
+    }
+
+    private fun historyFrom(document: JSONObject): List<DpiCommand> {
+        val history = document.optJSONArray("history") ?: return emptyList()
+        return (0 until history.length()).map { index ->
+            val record = history.getJSONObject(index)
+            DpiCommand(record.getString("text"), record.optBoolean("pinned"), record.optString("name").ifBlank { null })
+        }
     }
 
     private fun connectionOptions(snapshot: JSONObject): DpiConnectionOptions {
@@ -427,6 +488,7 @@ internal class DpiSettingsStore(context: Context) {
         const val UPSTREAM_APP = "io.github.romanvht.byedpi"
         const val MAX_CHARS = 2 * 1024 * 1024
         const val DEFAULT_CMD_ARGS = "-o1 -a1 -r-5+se"
+        const val MAX_HISTORY = 40
         val DOMAIN_FLAGS = setOf("isActive", "isBuiltIn", "isModified", "isDeleted")
         val SETTINGS_KEYS = setOf(
             "language", "app_theme", "dns_ip", "private_dns", "ipv6_enable", "applist_type", "autostart", "auto_connect",
