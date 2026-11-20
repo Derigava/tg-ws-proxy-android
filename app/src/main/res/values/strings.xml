@@ -206,5 +206,20 @@
     <string name="dpi_strategy_no_domain">No domain</string>
     <string name="dpi_strategy_tcp_fast_open">TCP Fast Open</string>
     <string name="dpi_strategy_drop_sack">Drop SACK</string>
+    <string name="dpi_strategy_fake">Fake packets</string>
+    <string name="dpi_strategy_fake_ttl">Fake TTL</string>
+    <string name="dpi_strategy_fake_sni">Fake SNI</string>
+    <string name="dpi_strategy_fake_offset">Fake offset</string>
+    <string name="dpi_strategy_oob_data">OOB data</string>
+    <string name="dpi_strategy_mod_http">HTTP modifiers</string>
+    <string name="dpi_strategy_host_mixed_case">Host mixed case</string>
+    <string name="dpi_strategy_domain_mixed_case">Domain mixed case</string>
+    <string name="dpi_strategy_host_remove_spaces">Remove host spaces</string>
+    <string name="dpi_strategy_tlsrec">TLS record</string>
+    <string name="dpi_strategy_tlsrec_enabled">Split TLS record</string>
+    <string name="dpi_strategy_tlsrec_position">TLS record position</string>
+    <string name="dpi_strategy_tlsrec_at_sni">TLS record at SNI</string>
+    <string name="dpi_strategy_udp">UDP</string>
+    <string name="dpi_strategy_udp_fake_count">UDP fake count</string>
     <string name="dpi_strategy_editor">ByeByeDPI strategy</string>
 </resources>

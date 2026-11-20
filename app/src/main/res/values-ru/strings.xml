@@ -205,5 +205,20 @@
     <string name="dpi_strategy_no_domain">Без домена</string>
     <string name="dpi_strategy_tcp_fast_open">TCP Fast Open</string>
     <string name="dpi_strategy_drop_sack">Отбрасывать SACK</string>
+    <string name="dpi_strategy_fake">Поддельные пакеты</string>
+    <string name="dpi_strategy_fake_ttl">TTL поддельных пакетов</string>
+    <string name="dpi_strategy_fake_sni">SNI поддельного пакета</string>
+    <string name="dpi_strategy_fake_offset">Смещение поддельных пакетов</string>
+    <string name="dpi_strategy_oob_data">OOB данные</string>
+    <string name="dpi_strategy_mod_http">Модификаторы HTTP</string>
+    <string name="dpi_strategy_host_mixed_case">Смешанный регистр хоста</string>
+    <string name="dpi_strategy_domain_mixed_case">Смешанный регистр домена</string>
+    <string name="dpi_strategy_host_remove_spaces">Удалить пробелы из хоста</string>
+    <string name="dpi_strategy_tlsrec">TLS запись</string>
+    <string name="dpi_strategy_tlsrec_enabled">Разделить TLS запись</string>
+    <string name="dpi_strategy_tlsrec_position">Позиция разделения TLS записи</string>
+    <string name="dpi_strategy_tlsrec_at_sni">TLS запись в SNI</string>
+    <string name="dpi_strategy_udp">UDP</string>
+    <string name="dpi_strategy_udp_fake_count">Количество поддельных UDP</string>
     <string name="dpi_strategy_editor">Стратегия ByeByeDPI</string>
 </resources>
