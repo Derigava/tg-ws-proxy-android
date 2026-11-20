@@ -135,6 +135,13 @@ internal class DpiSettingsStore(context: Context) {
         addCommand(command)
     }
 
+    /** Resets to a default document (parity X-03), dropping all settings, history and apps. */
+    fun resetSettings() {
+        check(preferences.edit().putString("backup", document().put("settings", JSONObject()).toString()).commit()) {
+            "Could not reset ByeByeDPI settings"
+        }
+    }
+
     private fun mutateHistory(transform: (List<DpiCommand>) -> List<DpiCommand>) {
         val document = JSONObject(exportJson())
         val next = transform(historyFrom(document))
