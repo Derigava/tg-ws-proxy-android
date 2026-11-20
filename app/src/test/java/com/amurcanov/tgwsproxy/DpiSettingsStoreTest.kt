@@ -28,6 +28,36 @@ class DpiSettingsStoreTest {
         assertFalse(output.toString().contains("not-for-export"))
     }
 
+    @Test fun strategyParametersMapToEngineArguments() {
+        val strategy = """{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","byedpi_max_connections":"100","byedpi_buffer_size":"4096","byedpi_desync_http":true,"byedpi_desync_https":true,"byedpi_desync_udp":true,"byedpi_hosts_mode":"blacklist","byedpi_hosts_blacklist":"example.com\ngoogle.com","byedpi_default_ttl":"64","byedpi_no_domain":true,"byedpi_desync_method":"oob","byedpi_split_position":"2","byedpi_split_at_host":true,"byedpi_fake_ttl":"8","byedpi_fake_sni":"www.iana.org","byedpi_fake_offset":"4","byedpi_oob_data":"a","byedpi_host_mixed_case":true,"byedpi_host_remove_spaces":true,"byedpi_tlsrec_enabled":true,"byedpi_tlsrec_position":"3","byedpi_tlsrec_at_sni":true,"byedpi_tcp_fast_open":true,"byedpi_drop_sack":true,"byedpi_udp_fake_count":"2"}}"""
+        store.importJson(strategy)
+        assertEquals(
+            listOf(
+                "-c100", "-b4096", "-H:example.com google.com", "-An", "-Kt,h",
+                "-g64", "-N", "-o2+h", "-e97", "-Mh,r", "-r3+s", "-F", "-Y",
+                "-An", "-Ku", "-a2", "-An",
+            ),
+            store.connectionOptions().args,
+        )
+    }
+
+    @Test fun defaultStrategyMirrorsUpstreamUISettingsDefaults() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080"}}""")
+        assertEquals(
+            listOf("-c512", "-b16384", "-Kt,h", "-o1", "-e97", "-An", "-Ku", "-a1", "-An"),
+            store.connectionOptions().args,
+        )
+    }
+
+    @Test fun invalidStrategyValueDoesNotOverwriteBackup() {
+        store.importJson(fixture)
+        val before = store.exportJson()
+        assertThrows(IllegalArgumentException::class.java) {
+            store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"byedpi_desync_method\":\"bogus\""))
+        }
+        assertEquals(before, store.exportJson())
+    }
+
     @Test fun importsEndpointAndPerAppRoutingWithoutActivatingVpn() {
         store.importJson(fixture.replace("\"1080\"", "\"23456\"").replace("\"ipv6_enable\":true", "\"ipv6_enable\":false,\"applist_type\":\"whitelist\""))
         val options = store.connectionOptions()

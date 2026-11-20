@@ -121,7 +121,7 @@ object DpiSession {
         val hostLabel = if (':' in options.host) "[${options.host}]" else options.host
         _endpoint.value = "$hostLabel:${options.port}"
         (engine as? DpiVpnEngine)?.replacement = replacement
-        activeController.start(DpiConfig(_mode.value, options.host, options.port, vpnRouting = options.routing))
+        activeController.start(DpiConfig(_mode.value, options.host, options.port, args = options.args, vpnRouting = options.routing))
     }
 
     fun stop() {
