@@ -82,7 +82,12 @@ android {
     // Old local builds may leave Rust binaries here; the Python-based application never ships them.
     sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets").get().asFile)
-    testOptions { unitTests.isReturnDefaultValues = true }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        // Compose UI tests run under Robolectric in the JVM unit-test task, so
+        // string/drawable/font resources must be visible to the Robolectric sandbox.
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 chaquopy {
     defaultConfig {
@@ -118,6 +123,13 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    // Compose UI tests on the JVM (Task 4: DualModuleControlsTest).
+    testImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    // Declares androidx.activity.ComponentActivity in the debug manifest so
+    // Robolectric can resolve the activity createComposeRule() launches.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

@@ -3,7 +3,7 @@ package com.amurcanov.tgwsproxy.ui
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -57,16 +57,15 @@ fun BrandHeader(section: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .heightIn(min = 56.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter = painterResource(if (Brand.isDark) R.drawable.wordmark_dark else R.drawable.wordmark_light),
-            contentDescription = "derigava_",
-            modifier = Modifier.height(20.dp)
-        )
-        MonoLabel("TECH / ${section.uppercase()}")
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.app_name), color = Brand.ink, style = MaterialTheme.typography.titleMedium)
+            MonoLabel(stringResource(R.string.app_byline))
+        }
+        MonoLabel("TECH / ${section.uppercase()}", Modifier.weight(0.65f))
     }
 }
 

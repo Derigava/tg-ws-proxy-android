@@ -39,7 +39,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.amurcanov.tgwsproxy.DpiSession
 import com.amurcanov.tgwsproxy.ProxyService
+import com.amurcanov.tgwsproxy.dpi.DpiMode
+import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.SettingsStore
 import kotlinx.coroutines.Job
@@ -58,6 +61,10 @@ fun SettingsTab(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val isRunning by ProxyService.isRunning.collectAsStateWithLifecycle()
+    var showDpiSettings by rememberSaveable { mutableStateOf(false) }
+    val dpiMode by DpiSession.mode.collectAsStateWithLifecycle()
+    val dpiState by DpiSession.state.collectAsStateWithLifecycle()
+    val dpiBoot by settingsStore.dpiAutoStartOnBoot.collectAsStateWithLifecycle(initialValue = false)
 
     val isReady by settingsStore.isReady.collectAsStateWithLifecycle(initialValue = false)
     val isExperimental by settingsStore.isExperimentalMode.collectAsStateWithLifecycle(initialValue = false)
@@ -180,7 +187,30 @@ fun SettingsTab(settingsStore: SettingsStore) {
         BrandHeader(section = stringResource(R.string.settings))
         Spacer(Modifier.height(8.dp))
         ScreenTitle(stringResource(R.string.settings))
+        Spacer(Modifier.height(8.dp))
+        BrandSegmented(
+            options = listOf(false to stringResource(R.string.dpi_logs_source_tg), true to stringResource(R.string.dpi_section)),
+            selected = showDpiSettings,
+            onSelect = { showDpiSettings = it },
+        )
 
+        if (showDpiSettings) {
+            SectionLabel(stringResource(R.string.dpi_section))
+            BrandSegmented(
+                options = listOf(
+                    DpiMode.VPN to stringResource(R.string.dpi_mode_vpn),
+                    DpiMode.SOCKS5 to stringResource(R.string.dpi_mode_socks5),
+                ),
+                selected = dpiMode,
+                enabled = dpiState is DpiState.Off || dpiState is DpiState.Failed,
+                onSelect = { DpiSession.switchMode(context, it) },
+            )
+            SwitchRow(
+                title = stringResource(R.string.dpi_boot_socks5),
+                checked = dpiBoot,
+                onCheckedChange = { enabled -> scope.launch { settingsStore.saveDpiAutoStartOnBoot(enabled) } },
+            )
+        } else {
         SectionLabel(stringResource(R.string.ip_and_port))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -313,6 +343,8 @@ fun SettingsTab(settingsStore: SettingsStore) {
                 scope.launch { settingsStore.saveAutoStartOnBoot(enabled) }
             }
         )
+
+        }
 
         SectionLabel(stringResource(R.string.access_section))
         AccessList(rows = rememberAccessRows(), onOpen = rememberAccessOpener())

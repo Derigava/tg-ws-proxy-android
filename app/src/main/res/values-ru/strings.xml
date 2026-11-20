@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">TG WS Proxy</string>
+    <string name="app_name">TG-WS Proxy</string>
     <string name="status_connecting">&gt; ПОДКЛЮЧЕНИЕ</string>
     <string name="status_connected">[OK] ПОДКЛЮЧЕНО</string>
     <string name="status_disconnected">● ОТКЛЮЧЕНО</string>
@@ -159,4 +159,29 @@
     <string name="update_open_failed">Не удалось открыть страницу релиза</string>
     <string name="shortcut_toggle">Переключить прокси</string>
     <string name="shortcut_confirm">Другое приложение запросило это действие. Подтверди его, чтобы продолжить.</string>
+
+    <!-- Task 4: парные модульные кнопки TG-WS / ByeByeDPI -->
+    <string name="dpi_action_start_vpn">Запустить VPN ByeByeDPI</string>
+    <string name="dpi_action_start_socks5">Запустить SOCKS5 ByeByeDPI</string>
+    <string name="dpi_action_stop">Остановить ByeByeDPI</string>
+    <string name="dpi_mode_vpn">VPN</string>
+    <string name="dpi_mode_socks5">SOCKS5</string>
+    <string name="dpi_status_vpn_running">[OK] VPN ПОДКЛЮЧЕН</string>
+    <string name="dpi_status_socks5_running">[OK] SOCKS5 ГОТОВ</string>
+    <string name="dpi_start_hint_vpn">Нажми, чтобы направить всё устройство через VPN</string>
+    <string name="dpi_start_hint_socks5">Нажми, чтобы запустить локальный SOCKS5-прокси</string>
+    <string name="dpi_failed">ByeByeDPI: %1$s</string>
+    <string name="vpn_consent_denied">VPN ByeByeDPI: разрешение отклонено</string>
+    <string name="vpn_offer_title">Активен другой VPN</string>
+    <string name="vpn_offer_body">VPN ByeByeDPI заменит активный VPN и отключит его. Выбери, как продолжить.</string>
+    <string name="vpn_offer_body_uncertain">Не удалось проверить владельца активного VPN. Его замена отключит его. Выбери, как продолжить.</string>
+    <string name="vpn_offer_replace">Заменить VPN</string>
+    <string name="vpn_offer_socks5">Использовать SOCKS5</string>
+    <string name="vpn_offer_cancel">Отмена</string>
+    <string name="dpi_section">ByeByeDPI</string>
+    <string name="dpi_boot_socks5">Запускать локальный SOCKS5 при загрузке</string>
+    <string name="dpi_logs_source_tg">TG-WS</string>
+    <string name="dpi_logs_source_dpi">ByeByeDPI</string>
+    <string name="dpi_status_stopping">Остановка</string>
+    <string name="dpi_log_failed">Ошибка движка</string>
 </resources>
