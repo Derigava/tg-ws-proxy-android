@@ -29,6 +29,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 
@@ -68,6 +69,10 @@ class DpiLifecycleInstrumentedTest {
                     port,
                 ) {
                     assertNull(DpiRemoteSession.inspect(context, DpiMode.SOCKS5))
+                    val stillListening = runCatching {
+                        Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 1_000) }
+                    }.isSuccess
+                    assertFalse("The test proxy must exit between strategies", stillListening)
                     scores.add(it.reachable)
                 }
             }

@@ -237,6 +237,9 @@
     <string name="dpi_strategy_test_empty">Ни одна стратегия не достигла тестовых узлов.</string>
     <string name="dpi_strategy_test_cancelled">Проверка остановлена.</string>
     <string name="dpi_strategy_test_failed">Не удалось завершить операцию.</string>
+    <string name="dpi_strategy_test_saved">Успешные стратегии</string>
+    <string name="dpi_strategy_test_timeout">Время проверки истекло.</string>
+    <string name="dpi_strategy_test_close">Закрыть</string>
     <string name="dpi_strategy_test_start_failures">Стратегий не запустилось: %1$d</string>
     <string name="dpi_strategy_test_unreachable">Недоступны: %1$s</string>
     <string name="dpi_strategy_test_score">HTTPS-узлов доступно: %1$d / %2$d</string>

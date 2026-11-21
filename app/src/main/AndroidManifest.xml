@@ -142,6 +142,14 @@
         </service>
 
         <service
+            android:name="com.amurcanov.tgwsproxy.dpi.DpiStrategyTestService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs a user-initiated network strategy test with progress and cancellation while the screen is off" />
+        </service>
+
+        <service
             android:name="com.amurcanov.tgwsproxy.ProxyTileService"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true"

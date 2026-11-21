@@ -75,8 +75,7 @@ internal class DpiStrategyTester(
                 } finally {
                     withContext(NonCancellable) { engine.stop() }
                 }
-                ensureActive()
-                onResult(result)
+                withContext(NonCancellable) { onResult(result) }
             }
         } finally {
             engine.onExit = null
