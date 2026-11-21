@@ -115,6 +115,18 @@ class SettingsStore(private val context: Context) {
     val updateDialogLastAction: Flow<String> = context.dataStore.data.map { it[Keys.UPDATE_DIALOG_LAST_ACTION] ?: "" }
     val updateDialogLastActionAt: Flow<Long> = context.dataStore.data.map { it[Keys.UPDATE_DIALOG_LAST_ACTION_AT] ?: 0L }
 
+    suspend fun ensureSecretKey(): String {
+        val result = context.dataStore.edit { prefs ->
+            val current = prefs[Keys.SECRET_KEY].orEmpty().trim()
+            if (current.length != 32 || current.any { it !in '0'..'9' && it.lowercaseChar() !in 'a'..'f' }) {
+                val bytes = ByteArray(16)
+                java.security.SecureRandom().nextBytes(bytes)
+                prefs[Keys.SECRET_KEY] = bytes.joinToString("") { "%02x".format(it) }
+            }
+        }
+        return result[Keys.SECRET_KEY]!!.trim()
+    }
+
     suspend fun saveSecretKey(key: String) {
         context.dataStore.edit { it[Keys.SECRET_KEY] = key }
     }

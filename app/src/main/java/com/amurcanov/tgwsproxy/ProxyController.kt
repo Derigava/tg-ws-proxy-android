@@ -37,7 +37,7 @@ object ProxyController {
         val customCfDomainEnabled = settingsStore.customCfDomainEnabled.first()
         val customCfDomain = settingsStore.customCfDomain.first().trim()
         val cfWorkerDomain = settingsStore.cfWorkerDomain.first().trim()
-        val secretKey = ensureSecretKey(settingsStore)
+        val secretKey = settingsStore.ensureSecretKey()
 
         // "Auto" keeps Flowseal's own default route: direct WebSocket to DC2
         // and DC4 first, Cloudflare only as fallback. An empty list would make
@@ -92,17 +92,6 @@ object ProxyController {
         ProxyTileService.requestSync(context)
     }
 
-    private suspend fun ensureSecretKey(settingsStore: SettingsStore): String {
-        val current = settingsStore.secretKey.first().trim()
-        if (isValidSecret(current)) {
-            return current
-        }
-
-        val generated = generateRandomSecret()
-        settingsStore.saveSecretKey(generated)
-        return generated
-    }
-
     private fun MutableList<String>.appendDc(dc: Int, value: String) {
         val ip = value.trim()
         if (ip.isNotBlank()) {
@@ -110,13 +99,4 @@ object ProxyController {
         }
     }
 
-    private fun generateRandomSecret(): String {
-        val bytes = ByteArray(16)
-        java.security.SecureRandom().nextBytes(bytes)
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun isValidSecret(value: String): Boolean {
-        return value.length == 32 && value.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-    }
 }
