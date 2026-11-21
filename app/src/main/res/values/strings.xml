@@ -77,6 +77,8 @@
     <string name="original_tg_ws_proxy_subtitle">Original idea and code by Flowseal</string>
     <string name="useful_material">Useful reading</string>
     <string name="useful_material_subtitle">Notes on how the proxy works by IMDelewer</string>
+    <string name="support_author">Support the author</string>
+    <string name="support_author_subtitle">Optional — the app stays free</string>
     <string name="unofficial_notice">Unofficial app, not affiliated with Telegram.</string>
     <string name="update_postponed_24h">Update postponed for 24 hours</string>
     <string name="help_auto_dc_title">Auto and data center addresses</string>
