@@ -17,6 +17,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.amurcanov.tgwsproxy.DpiSession
 import com.amurcanov.tgwsproxy.R
+import com.amurcanov.tgwsproxy.ServiceSelectionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +85,8 @@ internal class DpiStrategyTestService : Service() {
             withTimeout(RUN_TIMEOUT_MS) {
                 val app = applicationContext
                 val store = DpiSettingsStore(app)
+                val targets = dpiTargetsFor(ServiceSelectionStore(app).read())
+                if (targets.isEmpty()) return@withTimeout
                 val started = DpiSession.runStrategyTest(app) {
                     val (candidates, port) = withContext(Dispatchers.IO) {
                         val candidates = app.assets.open("proxytest_strategies.list").bufferedReader().use {
@@ -94,7 +97,7 @@ internal class DpiStrategyTestService : Service() {
                     }
                     mutableState.value = mutableState.value.copy(total = candidates.size)
                     val tester = DpiStrategyTester(NativeDpiEngine(app, owner = Binder()))
-                    tester.test(candidates, port) { result ->
+                    tester.test(candidates, port, targets) { result ->
                         store.saveSuccessfulStrategy(result)
                         withContext(Dispatchers.Main) {
                             val current = mutableState.value

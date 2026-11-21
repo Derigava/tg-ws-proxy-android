@@ -1,5 +1,6 @@
 package com.amurcanov.tgwsproxy.dpi
 
+import com.amurcanov.tgwsproxy.ServiceSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -20,6 +21,7 @@ internal data class DpiStrategyResult(
     val candidate: DpiStrategyCandidate,
     val reached: Set<DpiProbeTarget>,
     val startFailed: Boolean = false,
+    val targets: Set<DpiProbeTarget> = DpiProbeTarget.entries.toSet(),
 ) {
     val reachable: Int get() = reached.size
 }
@@ -35,10 +37,17 @@ internal enum class DpiProbeTarget(
         HttpURLConnection.HTTP_NOT_FOUND,
         HttpURLConnection.HTTP_BAD_METHOD,
     )),
-    IMAGES("i.ytimg.com", "/vi/M7lc1UVf-VE/hqdefault.jpg");
+    IMAGES("i.ytimg.com", "/vi/M7lc1UVf-VE/hqdefault.jpg"),
+    DISCORD_WEB("discord.com"),
+    DISCORD_API("discord.com", "/api/v10/gateway");
 
     val url = "https://$host$path"
-    fun accepts(status: Int): Boolean = status in 200..399 || status in extraStatus
+    fun accepts(status: Int): Boolean = status in 200..299 || status in extraStatus
+}
+
+internal fun dpiTargetsFor(selection: ServiceSelection): Set<DpiProbeTarget> = buildSet {
+    if (selection.youtube) addAll(setOf(DpiProbeTarget.WEB, DpiProbeTarget.API, DpiProbeTarget.IMAGES))
+    if (selection.discord) addAll(setOf(DpiProbeTarget.DISCORD_WEB, DpiProbeTarget.DISCORD_API))
 }
 
 internal fun rankDpiStrategies(results: List<DpiStrategyResult>): List<DpiStrategyResult> =
@@ -54,8 +63,10 @@ internal class DpiStrategyTester(
     suspend fun test(
         candidates: List<DpiStrategyCandidate>,
         port: Int,
+        targets: Set<DpiProbeTarget> = setOf(DpiProbeTarget.WEB, DpiProbeTarget.API, DpiProbeTarget.IMAGES),
         onResult: suspend (DpiStrategyResult) -> Unit,
     ) = withContext(Dispatchers.IO) {
+        require(targets.isNotEmpty())
         val testing = coroutineContext.job
         engine.onExit = { testing.cancel() }
         try {
@@ -65,17 +76,18 @@ internal class DpiStrategyTester(
                     val config = DpiConfig(DpiMode.SOCKS5, port = port, args = candidate.args)
                     if (engine.start(config) is DpiEngineResult.Running) {
                         val reachable = coroutineScope {
-                            DpiProbeTarget.entries.map { target -> async { target.takeIf { probe(port, target) } } }
+                            targets.map { target -> async { target.takeIf { probe(port, target) } } }
                                 .awaitAll().filterNotNull().toSet()
                         }
-                        DpiStrategyResult(candidate, reachable)
+                        DpiStrategyResult(candidate, reachable, targets = targets)
                     } else {
-                        DpiStrategyResult(candidate, emptySet(), startFailed = true)
+                        DpiStrategyResult(candidate, emptySet(), startFailed = true, targets = targets)
                     }
                 } finally {
                     withContext(NonCancellable) { engine.stop() }
                 }
                 withContext(NonCancellable) { onResult(result) }
+                if (result.reached.containsAll(targets)) break
             }
         } finally {
             engine.onExit = null

@@ -40,6 +40,8 @@ class DpiStrategyTesterTest {
         assertFalse(DpiProbeTarget.WEB.accepts(404))
         assertFalse(DpiProbeTarget.API.accepts(403))
         assertFalse(DpiProbeTarget.WEB.accepts(451))
+        assertFalse(DpiProbeTarget.DISCORD_WEB.accepts(302))
+        assertFalse(DpiProbeTarget.DISCORD_API.accepts(403))
     }
 
     @Test
@@ -54,12 +56,38 @@ class DpiStrategyTesterTest {
             }
             override fun stop() { events.add("stop") }
         }
-        val tester = DpiStrategyTester(engine, probe = { _, _ -> true })
+        val tester = DpiStrategyTester(engine, probe = { _, target -> target == DpiProbeTarget.WEB })
         val delivered = mutableListOf<DpiStrategyResult>()
         tester.test(candidates, port = 1081) { delivered.add(it) }
         assertEquals(listOf("start -o1", "stop", "start -d1", "stop", "start -s1", "stop"), events)
-        assertEquals(listOf(3, 0, 3), delivered.map { it.reachable })
+        assertEquals(listOf(1, 0, 1), delivered.map { it.reachable })
         assertTrue(delivered[1].startFailed)
+    }
+
+    @Test
+    fun selectedServicesMapOnlyToTheirOwnTargets() {
+        assertEquals(emptySet<DpiProbeTarget>(), dpiTargetsFor(com.amurcanov.tgwsproxy.ServiceSelection()))
+        assertEquals(setOf(DpiProbeTarget.DISCORD_WEB, DpiProbeTarget.DISCORD_API),
+            dpiTargetsFor(com.amurcanov.tgwsproxy.ServiceSelection(discord = true)))
+        assertEquals(setOf(DpiProbeTarget.WEB, DpiProbeTarget.API, DpiProbeTarget.IMAGES),
+            dpiTargetsFor(com.amurcanov.tgwsproxy.ServiceSelection(youtube = true)))
+    }
+
+    @Test
+    fun discordOnlyProbesDiscordAndStopsAfterFirstCompleteCandidate() = runBlocking {
+        val visited = java.util.Collections.synchronizedSet(mutableSetOf<DpiProbeTarget>())
+        var starts = 0
+        val engine = object : DpiEngine {
+            override var onExit: (() -> Unit)? = null
+            override fun start(config: DpiConfig): DpiEngineResult { starts++; return DpiEngineResult.Running }
+            override fun stop() = Unit
+        }
+        val delivered = mutableListOf<DpiStrategyResult>()
+        DpiStrategyTester(engine, probe = { _, target -> visited.add(target); true })
+            .test(candidates, 1081, setOf(DpiProbeTarget.DISCORD_WEB, DpiProbeTarget.DISCORD_API)) { delivered.add(it) }
+        assertEquals(setOf(DpiProbeTarget.DISCORD_WEB, DpiProbeTarget.DISCORD_API), visited)
+        assertEquals(1, starts)
+        assertEquals(1, delivered.size)
     }
 
     @Test
