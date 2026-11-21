@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -336,7 +338,9 @@ fun BrandField(
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         textStyle = textStyle.copy(color = if (enabled) Brand.ink else Brand.muted),
         cursorBrush = SolidColor(Brand.accent),
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = 48.dp).then(
+            if (placeholder != null) Modifier.semantics { contentDescription = placeholder } else Modifier
+        ),
         decorationBox = { inner ->
             Box(
                 contentAlignment = Alignment.CenterStart,
