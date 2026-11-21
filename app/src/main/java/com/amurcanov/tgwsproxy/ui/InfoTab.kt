@@ -49,6 +49,7 @@ private const val AndroidBaseUrl = "https://github.com/amurcanov/tg-ws-proxy-and
 private const val CoreUrl = "https://github.com/Flowseal/tg-ws-proxy"
 private const val DpiUpstreamUrl = "https://github.com/romanvht/ByeByeDPI"
 private const val ProxyReferenceUrl = "https://github.com/Flowseal/tg-ws-proxy/issues/389"
+private const val SupportUrl = "https://derigava.github.io/support/"
 
 @Composable
 fun InfoTab(settingsStore: SettingsStore) {
@@ -227,6 +228,13 @@ fun InfoTab(settingsStore: SettingsStore) {
                 onClick = { openUrlInBrowser(context, ProxyReferenceUrl) }
             )
         }
+
+        Spacer(Modifier.height(10.dp))
+        SupportPlate(
+            title = stringResource(R.string.support_author),
+            subtitle = stringResource(R.string.support_author_subtitle),
+            onClick = { openUrlInBrowser(context, SupportUrl) }
+        )
 
         Spacer(Modifier.height(16.dp))
         ProductByline()
