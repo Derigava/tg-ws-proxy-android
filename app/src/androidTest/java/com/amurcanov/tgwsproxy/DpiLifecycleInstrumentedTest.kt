@@ -56,16 +56,18 @@ class DpiLifecycleInstrumentedTest {
         withContext(Dispatchers.Main) {
             val tested = holder.runStrategyTest(context) {
                 val engine = NativeDpiEngine(context, owner = android.os.Binder())
-                val tester = DpiStrategyTester(engine, probe = { probePort, _ ->
+                val tester = DpiStrategyTester(engine, probe = { probePort, target ->
                     Socket("127.0.0.1", probePort).use { socket ->
                         socket.soTimeout = 1_000
                         socket.getOutputStream().write(byteArrayOf(5, 1, 0))
                         val response = socket.getInputStream()
-                        response.read() == 5 && response.read() == 0
+                        response.read() == 5 && response.read() == 0 &&
+                            (scores.isNotEmpty() || target != com.amurcanov.tgwsproxy.dpi.DpiProbeTarget.API)
                     }
                 })
                 tester.test(
-                    listOf(DpiStrategyCandidate("-o1", listOf("-o1")), DpiStrategyCandidate("-s1", listOf("-s1"))),
+                    listOf(DpiStrategyCandidate("-o1", listOf("-o1")), DpiStrategyCandidate("-s1", listOf("-s1")),
+                        DpiStrategyCandidate("unused", emptyList())),
                     port,
                 ) {
                     assertNull(DpiRemoteSession.inspect(context, DpiMode.SOCKS5))
@@ -80,7 +82,7 @@ class DpiLifecycleInstrumentedTest {
             assertEquals(DpiMode.VPN, holder.mode.value)
             assertEquals(DpiState.Off, holder.state.value)
         }
-        assertEquals(listOf(3, 3), scores)
+        assertEquals(listOf(2, 3), scores)
     }
 
     @Suppress("DEPRECATION")
