@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -17,6 +18,11 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], application = android.app.Application::class)
 class SwitchRowAccessibilityTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test fun populatedFieldKeepsItsAccessibleLabel() {
+        rule.setContent { TgWsProxyTheme { BrandField("2345", {}, placeholder = "Port") } }
+        rule.onNodeWithContentDescription("Port").assertExists()
+    }
 
     @Test fun titleAndSwitchAreOneActionableNode() {
         var changed = false
