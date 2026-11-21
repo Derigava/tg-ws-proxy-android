@@ -41,6 +41,8 @@ class DpiController internal constructor(
 
     /** Set when the engine exits while Starting; guarded by [stateLock]. */
     private var deathDuringStart = false
+    // A failed stop leaves ownership unknown until a later stop succeeds.
+    private var stopUnconfirmed = false
 
     init {
         engine.onExit = { onEngineExit() }
@@ -71,7 +73,7 @@ class DpiController internal constructor(
             // new session that could publish the previous engine's config or
             // resurrect a stopped engine. The UI must wait for Off before a
             // fresh start.
-            if (current is DpiState.Starting || current is DpiState.Running || current is DpiState.Stopping) return
+            if (stopUnconfirmed || current is DpiState.Starting || current is DpiState.Running || current is DpiState.Stopping) return
             _state.value = DpiState.Starting
             deathDuringStart = false
             ++startAttempt
@@ -115,6 +117,7 @@ class DpiController internal constructor(
                 synchronized(stateLock) {
                     // Do not clobber a start that superseded this stop.
                     if (_state.value is DpiState.Stopping) {
+                        stopUnconfirmed = result.isFailure
                         _state.value = result.fold(
                             onSuccess = { DpiState.Off },
                             onFailure = { DpiState.Failed(it.message ?: "engine stop failed") },
