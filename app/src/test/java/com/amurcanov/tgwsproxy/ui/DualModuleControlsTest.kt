@@ -142,6 +142,22 @@ class DualModuleControlsTest {
     }
 
     @Test
+    fun selectingVpnServiceImmediatelyExplainsVpnSlotWithoutForeignVpn() {
+        composeRule.setContent {
+            var selection by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.amurcanov.tgwsproxy.ServiceSelection()) }
+            TgWsProxyTheme {
+                DualModuleControls(selection, { selection = it }, CursorVisualState.Off, "Offline", "Start", {}, false, false, false, {})
+            }
+        }
+        val notice = "YouTube and Discord use Android’s VPN slot and may disconnect another VPN."
+        composeRule.onNodeWithText(notice).assertDoesNotExist()
+        composeRule.onNodeWithText("YouTube").performClick()
+        composeRule.onNodeWithText(notice).assertExists()
+        composeRule.onNodeWithText("YouTube").performClick()
+        composeRule.onNodeWithText(notice).assertDoesNotExist()
+    }
+
+    @Test
     fun homeHasOnePowerControlAndThreeAccessibleSelections() {
         var changes = com.amurcanov.tgwsproxy.ServiceSelection()
         var powers = 0

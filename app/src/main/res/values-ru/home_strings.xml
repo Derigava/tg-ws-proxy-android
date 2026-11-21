@@ -6,6 +6,7 @@
     <string name="home_vpn">VPN</string>
     <string name="home_tg_subtitle">Работает вместе с твоим VPN</string>
     <string name="home_vpn_subtitle">Занимает VPN-слот Android</string>
+    <string name="home_vpn_selection_warning">YouTube и Discord используют VPN-слот Android и могут отключить другой VPN.</string>
     <string name="home_vpn_warning">[!] Сейчас включён другой VPN. Для YouTube или Discord его, возможно, придётся отключить. Telegram продолжит работать рядом с ним.</string>
     <string name="home_socks_warning">Режим SOCKS5: настрой прокси в приложениях. Это не VPN-соединение.</string>
     <string name="home_start">Запустить выбранные сервисы</string>

@@ -99,7 +99,7 @@ fun ConnectionTab(
     val selection by selectionStore.changes.collectAsStateWithLifecycle(initialValue = selectionStore.read())
     var foreignVpnVisible by remember { mutableStateOf(false) }
     LaunchedEffect(selection.needsDpi, dpiState, dpiMode) {
-        while (selection.needsDpi) {
+        while (selection.needsDpi && dpiMode == DpiMode.VPN) {
             // Passive network observation only: VpnService.prepare can claim the slot.
             foreignVpnVisible = if (dpiState is DpiState.Running && dpiMode == DpiMode.VPN) false else runCatching {
                 val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
@@ -235,7 +235,7 @@ fun ConnectionTab(
                 if (plan.startTelegram) scope.launch { ProxyController.startFromSavedSettings(context = context, showInvalidPortToast = true) }
                 if (plan.startDpi) startDpi()
             },
-            showVpnWarning = selection.needsDpi && foreignVpnVisible,
+            showVpnWarning = selection.needsDpi && dpiMode == DpiMode.VPN && foreignVpnVisible,
             socksMode = dpiMode == DpiMode.SOCKS5,
             applyInTelegramEnabled = activeConnection != null,
             onApplyInTelegram = { activeConnection?.let { TelegramConnector.open(context, it) } }
