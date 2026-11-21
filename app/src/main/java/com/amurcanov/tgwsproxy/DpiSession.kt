@@ -20,8 +20,13 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.job
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,7 +73,12 @@ internal fun launchStrategyRestart(
  * engine for the single start attempt. A proof is minted by the UI only after a
  * visible offer is decided, and reused only if the fresh re-check still matches.
  */
-internal class DpiSessionHolder {
+internal class DpiSessionHolder(
+    dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val inspect: suspend (Context, DpiMode) -> DpiRemoteSession? = DpiRemoteSession::inspect,
+    private val stopRemote: suspend (Context, DpiMode) -> Boolean = DpiRemoteSession::stopExisting,
+    private val restorationTimeoutMs: Long = 8_000,
+) {
 
     private val attempts = DpiAttemptGuard()
     fun beginInteractiveStart(): String = attempts.begin()
@@ -76,7 +86,7 @@ internal class DpiSessionHolder {
         attempts.isCurrent(token) && _mode.value == DpiMode.VPN
     fun cancelInteractiveStart() = attempts.invalidate()
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
 
     private val _mode = MutableStateFlow(DpiMode.VPN)
     val mode: StateFlow<DpiMode> = _mode.asStateFlow()
@@ -142,7 +152,7 @@ internal class DpiSessionHolder {
         if (strategyTest != null || stopBeforeRestoration?.isActive == true) return false
         initialize(context)
         val current = controller?.state?.value ?: return false
-        if (current !is DpiState.Off && current !is DpiState.Failed) return false
+        if (current !is DpiState.Off || _state.value !is DpiState.Off) return false
         if (newMode == _mode.value) return true
         attempts.invalidate()
         commandVersion++
@@ -170,7 +180,7 @@ internal class DpiSessionHolder {
         }
         val activeController = checkNotNull(controller)
         val current = activeController.state.value
-        if (current !is DpiState.Off && current !is DpiState.Failed) return
+        if (current !is DpiState.Off || _state.value is DpiState.Failed) return
         val options = try {
             DpiSettingsStore(context).connectionOptions()
         } catch (_: Exception) {
@@ -204,17 +214,24 @@ internal class DpiSessionHolder {
         if (stopBeforeRestoration?.isActive == true) return
         val appContext = context.applicationContext
         val pending = restoration
+        stateJob?.cancel()
         _state.value = DpiState.Stopping
         stopBeforeRestoration = scope.launch {
             pending?.cancelAndJoin()
             restoration = null
-            val stopped = coroutineScope {
-                DpiMode.entries.map { mode ->
-                    async { runCatching { DpiRemoteSession.stopExisting(appContext, mode) }.getOrDefault(false) }
-                }.map { it.await() }.all { it }
-            }
-            rebuild(appContext)
-            if (!stopped) _state.value = DpiState.Failed("DPI stop could not be confirmed")
+            val stopped = withTimeoutOrNull(10_000) {
+                coroutineScope {
+                    DpiMode.entries.map { mode ->
+                        async {
+                            try { stopRemote(appContext, mode) }
+                            catch (e: CancellationException) { throw e }
+                            catch (_: Exception) { false }
+                        }
+                    }.map { it.await() }.all { it }
+                }
+            } ?: false
+            if (stopped) rebuild(appContext)
+            else _state.value = DpiState.Failed("DPI stop could not be confirmed")
         }
     }
 
@@ -238,23 +255,34 @@ internal class DpiSessionHolder {
         _state.value = DpiState.Starting
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                val remote = coroutineScope {
-                    val vpn = async { DpiRemoteSession.inspect(appContext, DpiMode.VPN) }
-                    val socks5 = async { DpiRemoteSession.inspect(appContext, DpiMode.SOCKS5) }
-                    vpn.await() ?: socks5.await()
-                }
-                var active = remote
-                if (remote != null) {
-                    _mode.value = remote.mode
-                    _endpoint.value = remote.endpoint
-                    while (active != null && !active.ready) {
-                        delay(100)
-                        active = DpiRemoteSession.inspect(appContext, remote.mode)
+                val active = withTimeout(restorationTimeoutMs) {
+                    val remote = coroutineScope {
+                        val vpn = async { inspect(appContext, DpiMode.VPN) }
+                        val socks5 = async { inspect(appContext, DpiMode.SOCKS5) }
+                        val vpnSession = vpn.await()
+                        val socksSession = socks5.await()
+                        if (vpnSession != null && socksSession != null) {
+                            throw IllegalStateException("Multiple DPI sessions found")
+                        }
+                        vpnSession ?: socksSession
                     }
+                    var found = remote
+                    if (remote != null) {
+                        _mode.value = remote.mode
+                        _endpoint.value = remote.endpoint
+                        while (found != null && !found.ready) {
+                            delay(100)
+                            found = inspect(appContext, remote.mode)
+                        }
+                    }
+                    found
                 }
                 rebuild(appContext, active)
             } catch (e: DpiRemoteSession.StatusUnavailableException) {
-                rebuild(appContext)
+                _state.value = DpiState.Failed(e.message ?: "DPI state could not be restored")
+            } catch (e: TimeoutCancellationException) {
+                _state.value = DpiState.Failed("DPI state reconciliation timed out")
+            } catch (e: IllegalStateException) {
                 _state.value = DpiState.Failed(e.message ?: "DPI state could not be restored")
             }
         }
