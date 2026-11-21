@@ -3,6 +3,8 @@ import asyncio
 import logging
 import socket
 import sys
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -89,6 +91,48 @@ class OnDeviceProbeTests(unittest.TestCase):
                                     "disable_secure": True}, ["cf.example"])
         self.assertTrue(routes[0][-1])
         self.assertFalse(routes[1][-1])
+
+    def test_cancelled_hung_probes_remain_bounded_across_restarts(self):
+        from route_probe import _run_probe
+        release = threading.Event()
+        lock = threading.Lock()
+        started = []
+        exited = []
+
+        def stuck(*_args, **_kwargs):
+            with lock:
+                started.append(1)
+            try:
+                release.wait(5)  # Test workers always terminate, even on assertion failure.
+                return {"ok": True}
+            finally:
+                with lock:
+                    exited.append(1)
+
+        async def exercise():
+            for expected in range(1, 4):
+                task = asyncio.create_task(_run_probe("host", "sni", "/", True))
+                deadline = time.monotonic() + 2
+                while len(started) < expected and time.monotonic() < deadline:
+                    await asyncio.sleep(.01)
+                self.assertEqual(len(started), expected)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+            for _ in range(30):
+                result = await _run_probe("host", "sni", "/", True)
+                self.assertEqual(result["stage"], "busy")
+            self.assertEqual(len(started), 3)
+
+        try:
+            with patch("route_probe.probe", side_effect=stuck):
+                asyncio.run(exercise())
+        finally:
+            release.set()
+            deadline = time.monotonic() + 2
+            while len(exited) < len(started) and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertEqual(len(exited), len(started))
 
     def test_run_logs_only_safe_result_and_does_not_raise_on_probe_error(self):
         from route_probe import run_diagnostics
