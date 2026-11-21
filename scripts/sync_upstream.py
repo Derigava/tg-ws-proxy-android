@@ -111,6 +111,8 @@ def sync(ref: str | None = None) -> dict:
     commit = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/commits/{urllib.parse.quote(ref, safe='')}"))["sha"]
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("Invalid upstream commit SHA")
+    if previous and previous.get("tag") == ref and previous.get("commit") != commit:
+        raise ValueError(f"Locked Flowseal tag {ref} moved to a different commit")
     if previous and previous["commit"] == commit:
         validate(VENDOR, previous)
         return {"changed": False, "tag": previous["tag"], "commit": commit, "core_version": previous["core_version"]}
