@@ -27,25 +27,30 @@ import com.amurcanov.tgwsproxy.ui.SectionLabel
 internal fun DpiDiagnostics() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
-    val options = remember(store) { runCatching { store.connectionOptions() }.getOrNull() }
+    val options = runCatching { store.diagnosticsSnapshot() }.getOrNull()
     val copied = stringResource(R.string.copied)
 
     if (options == null) return
-    val commandMode = (store.currentSettings()["byedpi_enable_cmd_settings"] as? Boolean) ?: true
-    val lines = listOf(
-        stringResource(R.string.dpi_diag_endpoint) to "${options.host}:${options.port}",
-        stringResource(R.string.dpi_diag_mode) to (if (commandMode) stringResource(R.string.dpi_cmd_use_command_line) else stringResource(R.string.dpi_strategy_editor)),
-        stringResource(R.string.dpi_diag_args) to options.args.joinToString(" "),
-        stringResource(R.string.dpi_diag_ipv6) to options.routing.ipv6.toString(),
-        stringResource(R.string.dpi_diag_apps) to options.routing.appListMode.name,
+    val endpointLabel = stringResource(R.string.dpi_diag_endpoint)
+    val modeLabel = stringResource(R.string.dpi_diag_mode)
+    val commandLabel = stringResource(R.string.dpi_cmd_use_command_line)
+    val editorLabel = stringResource(R.string.dpi_strategy_editor)
+    val ipv6Label = stringResource(R.string.dpi_diag_ipv6)
+    val appsLabel = stringResource(R.string.dpi_diag_apps)
+    fun lines(snapshot: com.amurcanov.tgwsproxy.dpi.DpiDiagnosticsSnapshot) = listOf(
+        endpointLabel to "${snapshot.host}:${snapshot.port}",
+        modeLabel to (if (snapshot.commandMode) commandLabel else editorLabel),
+        ipv6Label to snapshot.ipv6.toString(),
+        appsLabel to snapshot.appFilter.name,
     )
-    val report = lines.joinToString("\n") { "${it.first}: ${it.second}" }
 
     SectionLabel(stringResource(R.string.dpi_diag_title))
-    KeyValueTable(lines)
+    KeyValueTable(lines(options))
     MonoAction(
         text = stringResource(R.string.copy),
         onClick = {
+            val snapshot = runCatching { store.diagnosticsSnapshot() }.getOrNull() ?: return@MonoAction
+            val report = lines(snapshot).joinToString("\n") { "${it.first}: ${it.second}" }
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("ByeByeDPI diagnostics", report))
             Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()

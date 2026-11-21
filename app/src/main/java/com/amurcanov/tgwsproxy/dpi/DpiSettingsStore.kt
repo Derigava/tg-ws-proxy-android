@@ -14,6 +14,11 @@ internal data class DpiConnectionOptions(
 
 internal data class DpiCommand(val text: String, val pinned: Boolean = false, val name: String? = null)
 
+internal data class DpiDiagnosticsSnapshot(
+    val host: String, val port: Int, val commandMode: Boolean,
+    val ipv6: Boolean, val appFilter: VpnAppListMode,
+)
+
 internal data class DpiDomainList(
     val id: String,
     val name: String,
@@ -83,6 +88,13 @@ internal class DpiSettingsStore(context: Context) {
     }
 
     fun connectionOptions(): DpiConnectionOptions = connectionOptions(JSONObject(exportJson()))
+
+    fun diagnosticsSnapshot(): DpiDiagnosticsSnapshot {
+        val document = JSONObject(exportJson())
+        val options = connectionOptions(document)
+        val mode = document.optJSONObject("settings")?.section("byedpi_enable_cmd_settings") as? Boolean ?: true
+        return DpiDiagnosticsSnapshot(options.host, options.port, mode, options.routing.ipv6, options.routing.appListMode)
+    }
 
     /** Raw settings map for the editor; values are String/Number/Boolean. */
     fun currentSettings(): Map<String, Any?> {
