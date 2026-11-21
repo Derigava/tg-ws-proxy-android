@@ -170,6 +170,10 @@
                 android:resource="@xml/share_paths" />
         </provider>
 
+        <receiver
+            android:name="com.amurcanov.tgwsproxy.ProxyNotificationStopReceiver"
+            android:exported="false" />
+
         <!-- Start on the system broadcast only when the user enabled autostart. -->
         <receiver
             android:name="com.amurcanov.tgwsproxy.BootReceiver"
