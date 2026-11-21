@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,16 +42,19 @@ private fun installedLaunchableApps(context: Context): List<LaunchableApp> {
 internal fun DpiAppSelector() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    val document = rememberDpiDocument(store)
+    var saveError by remember(document) { mutableStateOf(false) }
     val apps = remember(context) { installedLaunchableApps(context) }
-    var mode by remember { mutableStateOf(store.connectionOptions().routing.appListMode.name.lowercase().let { if (it == "all_apps") "disable" else it }) }
-    var selected by remember {
+    var mode by remember(document) { mutableStateOf(store.connectionOptions().routing.appListMode.name.lowercase().let { if (it == "all_apps") "disable" else it }) }
+    var selected by remember(document) {
         mutableStateOf(store.connectionOptions().routing.apps.toSet())
     }
 
     fun persist() {
-        runCatching { store.setAppList(mode, selected.toList()) }
+        saveError = runCatching { store.setAppList(mode, selected.toList()) }.isFailure
     }
 
+    if (saveError) Text(stringResource(R.string.dpi_edit_unsaved))
     SectionLabel(stringResource(R.string.dpi_app_filter))
     BrandSegmented(
         options = listOf("disable", "blacklist", "whitelist").map { it to stringResource(when (it) {

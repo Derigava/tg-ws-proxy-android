@@ -27,6 +27,7 @@ import com.amurcanov.tgwsproxy.ui.SectionLabel
 internal fun DpiDiagnostics() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    rememberDpiDocument(store)
     val options = runCatching { store.diagnosticsSnapshot() }.getOrNull()
     val copied = stringResource(R.string.copied)
 

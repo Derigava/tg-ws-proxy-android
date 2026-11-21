@@ -2,6 +2,7 @@ package com.amurcanov.tgwsproxy.ui.dpi
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,36 +38,39 @@ private fun DpiSettingsStore.int(key: String, default: Int) =
 internal fun DpiStrategyEditor() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    val document = rememberDpiDocument(store)
+    var saveError by remember(document) { mutableStateOf(false) }
 
-    var method by remember { mutableStateOf(store.string("byedpi_desync_method", "oob")) }
-    var splitPosition by remember { mutableStateOf(store.int("byedpi_split_position", 1).toString()) }
-    var splitAtHost by remember { mutableStateOf(store.bool("byedpi_split_at_host", false)) }
-    var desyncHttp by remember { mutableStateOf(store.bool("byedpi_desync_http", true)) }
-    var desyncHttps by remember { mutableStateOf(store.bool("byedpi_desync_https", true)) }
-    var desyncUdp by remember { mutableStateOf(store.bool("byedpi_desync_udp", true)) }
-    var hostsMode by remember { mutableStateOf(store.string("byedpi_hosts_mode", "disable")) }
-    var hostsBlacklist by remember { mutableStateOf(store.string("byedpi_hosts_blacklist", "")) }
-    var hostsWhitelist by remember { mutableStateOf(store.string("byedpi_hosts_whitelist", "")) }
-    var defaultTtl by remember { mutableStateOf(store.int("byedpi_default_ttl", 0).toString()) }
-    var noDomain by remember { mutableStateOf(store.bool("byedpi_no_domain", false)) }
-    var tcpFastOpen by remember { mutableStateOf(store.bool("byedpi_tcp_fast_open", false)) }
-    var dropSack by remember { mutableStateOf(store.bool("byedpi_drop_sack", false)) }
-    var fakeTtl by remember { mutableStateOf(store.int("byedpi_fake_ttl", 8).toString()) }
-    var fakeSni by remember { mutableStateOf(store.string("byedpi_fake_sni", "www.iana.org")) }
-    var fakeOffset by remember { mutableStateOf(store.int("byedpi_fake_offset", 0).toString()) }
-    var oobData by remember { mutableStateOf(store.string("byedpi_oob_data", "a")) }
-    var hostMixedCase by remember { mutableStateOf(store.bool("byedpi_host_mixed_case", false)) }
-    var domainMixedCase by remember { mutableStateOf(store.bool("byedpi_domain_mixed_case", false)) }
-    var hostRemoveSpaces by remember { mutableStateOf(store.bool("byedpi_host_remove_spaces", false)) }
-    var tlsrecEnabled by remember { mutableStateOf(store.bool("byedpi_tlsrec_enabled", false)) }
-    var tlsrecPosition by remember { mutableStateOf(store.int("byedpi_tlsrec_position", 0).toString()) }
-    var tlsrecAtSni by remember { mutableStateOf(store.bool("byedpi_tlsrec_at_sni", false)) }
-    var udpFakeCount by remember { mutableStateOf(store.int("byedpi_udp_fake_count", 1).toString()) }
+    var method by remember(document) { mutableStateOf(store.string("byedpi_desync_method", "oob")) }
+    var splitPosition by remember(document) { mutableStateOf(store.int("byedpi_split_position", 1).toString()) }
+    var splitAtHost by remember(document) { mutableStateOf(store.bool("byedpi_split_at_host", false)) }
+    var desyncHttp by remember(document) { mutableStateOf(store.bool("byedpi_desync_http", true)) }
+    var desyncHttps by remember(document) { mutableStateOf(store.bool("byedpi_desync_https", true)) }
+    var desyncUdp by remember(document) { mutableStateOf(store.bool("byedpi_desync_udp", true)) }
+    var hostsMode by remember(document) { mutableStateOf(store.string("byedpi_hosts_mode", "disable")) }
+    var hostsBlacklist by remember(document) { mutableStateOf(store.string("byedpi_hosts_blacklist", "")) }
+    var hostsWhitelist by remember(document) { mutableStateOf(store.string("byedpi_hosts_whitelist", "")) }
+    var defaultTtl by remember(document) { mutableStateOf(store.int("byedpi_default_ttl", 0).toString()) }
+    var noDomain by remember(document) { mutableStateOf(store.bool("byedpi_no_domain", false)) }
+    var tcpFastOpen by remember(document) { mutableStateOf(store.bool("byedpi_tcp_fast_open", false)) }
+    var dropSack by remember(document) { mutableStateOf(store.bool("byedpi_drop_sack", false)) }
+    var fakeTtl by remember(document) { mutableStateOf(store.int("byedpi_fake_ttl", 8).toString()) }
+    var fakeSni by remember(document) { mutableStateOf(store.string("byedpi_fake_sni", "www.iana.org")) }
+    var fakeOffset by remember(document) { mutableStateOf(store.int("byedpi_fake_offset", 0).toString()) }
+    var oobData by remember(document) { mutableStateOf(store.string("byedpi_oob_data", "a")) }
+    var hostMixedCase by remember(document) { mutableStateOf(store.bool("byedpi_host_mixed_case", false)) }
+    var domainMixedCase by remember(document) { mutableStateOf(store.bool("byedpi_domain_mixed_case", false)) }
+    var hostRemoveSpaces by remember(document) { mutableStateOf(store.bool("byedpi_host_remove_spaces", false)) }
+    var tlsrecEnabled by remember(document) { mutableStateOf(store.bool("byedpi_tlsrec_enabled", false)) }
+    var tlsrecPosition by remember(document) { mutableStateOf(store.int("byedpi_tlsrec_position", 0).toString()) }
+    var tlsrecAtSni by remember(document) { mutableStateOf(store.bool("byedpi_tlsrec_at_sni", false)) }
+    var udpFakeCount by remember(document) { mutableStateOf(store.int("byedpi_udp_fake_count", 1).toString()) }
 
     fun persist(key: String, value: Any?) {
-        runCatching { store.updateSettings(mapOf(key to value)) }
+        saveError = runCatching { store.updateSettings(mapOf(key to value)) }.isFailure
     }
 
+    if (saveError) Text(stringResource(R.string.dpi_edit_unsaved))
     Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier) {
         SectionLabel(stringResource(R.string.dpi_strategy_desync))
         BrandSegmented(
@@ -81,7 +85,7 @@ internal fun DpiStrategyEditor() {
             onValueChange = { filtered ->
                 val digits = filtered.filter(Char::isDigit)
                 splitPosition = digits
-                digits.toIntOrNull()?.let { persist("byedpi_split_position", it) }
+                if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_split_position", it) }
             },
             placeholder = stringResource(R.string.dpi_strategy_split_position),
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
@@ -135,7 +139,7 @@ internal fun DpiStrategyEditor() {
             onValueChange = { filtered ->
                 val digits = filtered.filter(Char::isDigit)
                 defaultTtl = digits
-                digits.toIntOrNull()?.let { persist("byedpi_default_ttl", it) }
+                if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_default_ttl", it) }
             },
             placeholder = stringResource(R.string.dpi_strategy_default_ttl),
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
@@ -163,7 +167,7 @@ internal fun DpiStrategyEditor() {
                 onValueChange = { filtered ->
                     val digits = filtered.filter(Char::isDigit)
                     fakeTtl = digits
-                    digits.toIntOrNull()?.let { persist("byedpi_fake_ttl", it) }
+                    if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_fake_ttl", it) }
                 },
                 placeholder = stringResource(R.string.dpi_strategy_fake_ttl),
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
@@ -178,7 +182,7 @@ internal fun DpiStrategyEditor() {
                 onValueChange = { filtered ->
                     val digits = filtered.filter(Char::isDigit)
                     fakeOffset = digits
-                    digits.toIntOrNull()?.let { persist("byedpi_fake_offset", it) }
+                    if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_fake_offset", it) }
                 },
                 placeholder = stringResource(R.string.dpi_strategy_fake_offset),
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
@@ -221,7 +225,7 @@ internal fun DpiStrategyEditor() {
                 onValueChange = { filtered ->
                     val digits = filtered.filter(Char::isDigit)
                     tlsrecPosition = digits
-                    digits.toIntOrNull()?.let { persist("byedpi_tlsrec_position", it) }
+                    if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_tlsrec_position", it) }
                 },
                 placeholder = stringResource(R.string.dpi_strategy_tlsrec_position),
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
@@ -239,7 +243,7 @@ internal fun DpiStrategyEditor() {
             onValueChange = { filtered ->
                 val digits = filtered.filter(Char::isDigit)
                 udpFakeCount = digits
-                digits.toIntOrNull()?.let { persist("byedpi_udp_fake_count", it) }
+                if (digits.toIntOrNull() == null) saveError = true else digits.toIntOrNull()?.let { persist("byedpi_udp_fake_count", it) }
             },
             placeholder = stringResource(R.string.dpi_strategy_udp_fake_count),
             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
