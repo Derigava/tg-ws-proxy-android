@@ -148,7 +148,7 @@ fun ConnectionTab(
         dpiMode == DpiMode.VPN -> stringResource(R.string.dpi_start_hint_vpn)
         else -> stringResource(R.string.dpi_start_hint_socks5)
     }
-    val dpiActionDescription = if (dpiIsActive) stringResource(R.string.dpi_action_stop)
+    val dpiActionDescription = if (dpiIsActive || dpiState is DpiState.Failed) stringResource(R.string.dpi_action_stop)
     else if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_action_start_vpn)
     else stringResource(R.string.dpi_action_start_socks5)
 
@@ -217,7 +217,7 @@ fun ConnectionTab(
     }
 
     val onToggleDpi: () -> Unit = {
-        if (dpiIsActive || pendingConsentAttempt != null || pendingOffer != null) {
+        if (dpiIsActive || dpiState is DpiState.Failed || pendingConsentAttempt != null || pendingOffer != null) {
             pendingOffer = null
             DpiSession.stop(context)
         } else startDpi()
