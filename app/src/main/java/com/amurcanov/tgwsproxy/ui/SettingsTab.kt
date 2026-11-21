@@ -38,7 +38,6 @@ fun SettingsTab(settingsStore: SettingsStore) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
             BrandHeader(section = stringResource(R.string.settings))
             Spacer(Modifier.height(8.dp))
-            ScreenTitle(stringResource(R.string.settings))
             SettingsBasicsContent(port80, tgBoot, dpiBoot, !running,
                 { value -> scope.launch { settingsStore.saveCfDisableTls(value) } },
                 { value -> scope.launch { settingsStore.saveAutoStartOnBoot(value) } },

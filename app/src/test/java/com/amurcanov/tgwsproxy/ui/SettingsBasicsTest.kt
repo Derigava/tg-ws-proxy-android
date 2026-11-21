@@ -3,6 +3,8 @@ package com.amurcanov.tgwsproxy.ui
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -14,6 +16,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], application = android.app.Application::class)
 class SettingsBasicsTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun settingsHasOnlyOneSectionTitle() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        compose.setContent { TgWsProxyTheme { SettingsTab(com.amurcanov.tgwsproxy.SettingsStore(context)) } }
+        compose.onAllNodesWithText(context.getString(com.amurcanov.tgwsproxy.R.string.settings), ignoreCase = true).assertCountEquals(1)
+    }
 
     @Test fun portAndBootTogglesInvokeOnlyTheirOwnCallback() {
         var port = false
