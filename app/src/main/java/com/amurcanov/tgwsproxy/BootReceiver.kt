@@ -28,14 +28,20 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val settingsStore = SettingsStore(appContext)
-                if (settingsStore.autoStartOnBoot.first()) {
-                    val started = ProxyController.startFromSavedSettings(
-                        context = appContext,
-                        showInvalidPortToast = false
-                    )
-                    Log.i(TAG, "Boot completed, proxy autostart requested: $started")
-                } else {
-                    Log.i(TAG, "Boot completed, proxy autostart disabled")
+                try {
+                    if (settingsStore.autoStartOnBoot.first()) {
+                        val started = ProxyController.startFromSavedSettings(
+                            context = appContext,
+                            showInvalidPortToast = false
+                        )
+                        Log.i(TAG, "Boot completed, proxy autostart requested: $started")
+                    } else {
+                        Log.i(TAG, "Boot completed, proxy autostart disabled")
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to autostart Telegram after boot", e)
                 }
 
                 // The DPI module has its own opt-in; start it only when the user
@@ -46,6 +52,8 @@ class BootReceiver : BroadcastReceiver() {
                 } else {
                     Log.i(TAG, "Boot completed, DPI autostart disabled")
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to autostart after boot", e)
             } finally {
