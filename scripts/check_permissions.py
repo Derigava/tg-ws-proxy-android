@@ -123,6 +123,8 @@ def check_components(tree: str, package: str) -> None:
         ("activity", "com.amurcanov.tgwsproxy.DpiShortcutActivity"): None,
         ("activity", "com.amurcanov.tgwsproxy.ProxyTilePreferencesActivity"): "android.permission.BIND_QUICK_SETTINGS_TILE",
         ("service", "com.amurcanov.tgwsproxy.ProxyTileService"): "android.permission.BIND_QUICK_SETTINGS_TILE",
+        ("service", "androidx.work.impl.background.systemjob.SystemJobService"): "android.permission.BIND_JOB_SERVICE",
+        ("receiver", "androidx.work.impl.diagnostics.DiagnosticsReceiver"): "android.permission.DUMP",
         ("receiver", "androidx.profileinstaller.ProfileInstallReceiver"): "android.permission.DUMP",
     }
     for kind, attrs, actions in components:
