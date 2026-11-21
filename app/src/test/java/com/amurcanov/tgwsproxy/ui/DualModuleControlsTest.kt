@@ -23,6 +23,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.unit.Density
@@ -116,11 +117,13 @@ class DualModuleControlsTest {
     }
 
     @Test
-    fun settingsExposeSeparateModulePages() {
+    fun settingsExposeSeparateModulePagesBehindAdvanced() {
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         composeRule.setContent {
             TgWsProxyTheme { SettingsTab(com.amurcanov.tgwsproxy.SettingsStore(context)) }
         }
+        composeRule.onNodeWithText("ByeByeDPI").assertDoesNotExist()
+        composeRule.onNodeWithText(context.getString(com.amurcanov.tgwsproxy.R.string.settings_v3_advanced)).performScrollTo().performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodes(androidx.compose.ui.test.hasText("ByeByeDPI")).fetchSemanticsNodes().isNotEmpty()
         }

@@ -222,6 +222,10 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun saveCfDisableTls(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.CF_DISABLE_TLS] = enabled }
+    }
+
     suspend fun saveAll(isDcAuto: Boolean, dc1: String, dc2: String, dc3: String, dc4: String, dc5: String, dc203: String,
                         dc1m: String, dc2m: String, dc3m: String, dc4m: String, dc5m: String, dc203m: String,
                         isExperimental: Boolean, bindIp: String, port: String, poolSize: Int,
