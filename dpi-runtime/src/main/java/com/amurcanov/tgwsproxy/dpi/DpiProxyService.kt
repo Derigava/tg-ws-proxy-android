@@ -10,7 +10,10 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.RemoteException
 import android.os.Process
 import android.os.ResultReceiver
 import android.util.Log
@@ -41,6 +44,7 @@ class DpiProxyService : Service() {
         const val EXTRA_HOST = "EXTRA_HOST"
         const val EXTRA_PORT = "EXTRA_PORT"
         const val EXTRA_RESULT_RECEIVER = "EXTRA_RESULT_RECEIVER"
+        internal const val EXTRA_OWNER = "EXTRA_OWNER"
         const val EXTRA_BINDER = "EXTRA_BINDER"
         const val EXTRA_ERROR = "EXTRA_ERROR"
         const val RESULT_SESSION = 3
@@ -113,6 +117,17 @@ class DpiProxyService : Service() {
             return
         }
 
+        // A temporary strategy probe must end when the process running it dies.
+        val owner = intent.extras?.getBinder(EXTRA_OWNER)
+        if (owner != null) {
+            val main = Handler(Looper.getMainLooper())
+            try {
+                owner.linkToDeath({ main.post { if (endpoint != null) stop() } }, 0)
+            } catch (_: RemoteException) {
+                terminate()
+                return
+            }
+        }
         endpoint = dpiEndpoint(host, port)
         stopping = false
         ready = false

@@ -49,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import com.amurcanov.tgwsproxy.dpi.VpnSlotState
 import com.amurcanov.tgwsproxy.dpi.VpnReplacement
 import com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyPickerDialog
+import com.amurcanov.tgwsproxy.ui.dpi.DpiStrategyTestDialog
 import com.amurcanov.tgwsproxy.dpi.VpnStartDecision
 import kotlinx.coroutines.launch
 
@@ -156,6 +157,7 @@ fun ConnectionTab(
     var pendingConsentSlot by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingConsentNetworks by rememberSaveable { mutableStateOf<LongArray?>(null) }
     var showStrategyPicker by remember { mutableStateOf(false) }
+    var showStrategyTest by remember { mutableStateOf(false) }
 
     // Strings resolved once in composition (stringResource is @Composable), then
     // read by the non-composable command lambdas below.
@@ -268,6 +270,12 @@ fun ConnectionTab(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
+        BrandLink(
+            text = stringResource(R.string.dpi_strategy_test),
+            onClick = { showStrategyTest = true },
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
         if (showAccessWarning) {
             AccessWarningRow(onClick = onShowAccess, modifier = Modifier.padding(bottom = 10.dp))
         }
@@ -337,6 +345,8 @@ fun ConnectionTab(
             )
         }
     }
+
+    if (showStrategyTest) DpiStrategyTestDialog(onDismiss = { showStrategyTest = false })
 
     if (showStrategyPicker) {
         DpiStrategyPickerDialog(onDismiss = { showStrategyPicker = false })

@@ -136,6 +136,30 @@ internal class DpiSettingsStore(context: Context) {
 
     fun clearUnpinnedHistory() = mutateHistory { current -> current.filter { it.pinned } }
 
+    fun strategyCandidates(builtIn: Sequence<String>): List<DpiStrategyCandidate> {
+        val snapshot = JSONObject(exportJson())
+        val settings = snapshot.optJSONObject("settings") ?: JSONObject()
+        val current = if (settings.section("byedpi_enable_cmd_settings") == false) {
+            strategyArgs(settings).joinToString(" ") { token ->
+                if (token.any { it.isWhitespace() || it == '"' || it == '\'' }) {
+                    "\"" + token.replace("\"", "\\\"") + "\""
+                } else token
+            }
+        } else {
+            settings.section("byedpi_cmd_args") as? String ?: DEFAULT_CMD_ARGS
+        }
+        return (sequenceOf(current) + pinnedHistory().asSequence().map { it.text } + builtIn)
+            .map { it.trim().replace("{sni}", "google.com") }
+            .filter { it.isNotEmpty() && !it.startsWith("#") }
+            .distinct()
+            .mapNotNull { command ->
+                val args = commandTokens(JSONObject().put("byedpi_cmd_args", command), snapshot).first
+                args.takeIf { it.isNotEmpty() }?.let { DpiStrategyCandidate(command, it) }
+            }
+            .distinctBy { it.args }
+            .toList()
+    }
+
     /** Applies a strategy command: enables command mode, sets the args, records history. */
     fun applyStrategy(command: String) {
         if (command.isBlank()) return

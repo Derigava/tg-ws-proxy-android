@@ -22,6 +22,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.job
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -65,6 +67,7 @@ internal class DpiSessionHolder {
     private var restoration: Job? = null
     private var stopBeforeRestoration: Job? = null
     private var commandVersion = 0L
+    private var strategyTest: Job? = null
     private val journal = MutableStateFlow<List<LogEntry>>(emptyList())
     val logs = journal.asStateFlow()
     private var nextLogId = 0L
@@ -98,7 +101,7 @@ internal class DpiSessionHolder {
 
     /** Switches mode only while Off; rejects (and reports) otherwise. */
     fun switchMode(context: Context, newMode: DpiMode): Boolean {
-        if (stopBeforeRestoration?.isActive == true) return false
+        if (strategyTest != null || stopBeforeRestoration?.isActive == true) return false
         initialize(context)
         val current = controller?.state?.value ?: return false
         if (current !is DpiState.Off && current !is DpiState.Failed) return false
@@ -114,7 +117,7 @@ internal class DpiSessionHolder {
      * engine's own authorize-then-establish re-check.
      */
     fun start(context: Context, replacement: VpnReplacement? = null) {
-        if (stopBeforeRestoration?.isActive == true) return
+        if (strategyTest != null || stopBeforeRestoration?.isActive == true) return
         initialize(context)
         if (controller == null) {
             val pending = restoration ?: return
@@ -147,6 +150,10 @@ internal class DpiSessionHolder {
 
     fun stop(context: Context) {
         commandVersion++
+        strategyTest?.let {
+            it.cancel()
+            return
+        }
         val local = controller
         val current = local?.state?.value
         if (local != null && current != DpiState.Off && current !is DpiState.Failed) {
@@ -167,6 +174,20 @@ internal class DpiSessionHolder {
             }
             rebuild(appContext)
             if (!stopped) _state.value = DpiState.Failed("DPI stop could not be confirmed")
+        }
+    }
+
+    suspend fun runStrategyTest(context: Context, test: suspend () -> Unit): Boolean {
+        awaitRestoration(context)
+        if (strategyTest != null || state.value != DpiState.Off || controller?.state?.value != DpiState.Off) {
+            return false
+        }
+        strategyTest = coroutineContext.job
+        return try {
+            test()
+            true
+        } finally {
+            strategyTest = null
         }
     }
 
