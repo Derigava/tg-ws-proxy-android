@@ -194,14 +194,12 @@ def main() -> None:
     finally:
         for name, command in {
             "crash": ("logcat", "-d", "-b", "crash", "-v", "threadtime"),
-            "logcat": ("logcat", "-d", "-b", "all", "-v", "threadtime"),
-            "exit-info": ("shell", "dumpsys", "activity", "exit-info", args.package),
+            "logcat": ("logcat", "-d", "-b", "main", "-b", "system", "-b", "events", "-v", "threadtime", "AndroidRuntime:E", "ActivityManager:E", "am_anr:I", "*:S"),
         }.items():
             try:
                 diagnostics[name] = adb(*command, check=False, timeout=30).stdout
-                args.report.with_suffix(f".{name}.txt").write_text(diagnostics[name], encoding="utf-8")
-            except Exception as error:
-                diagnostics[name] = f"Diagnostic unavailable: {error}"
+            except Exception:
+                diagnostics[name] = ""
         if failure is None:
             try:
                 validate_runtime(
@@ -212,13 +210,10 @@ def main() -> None:
                 )
             except Exception as error:
                 failure = error
-        details = str(failure)
-        if isinstance(failure, subprocess.CalledProcessError) and failure.stdout:
-            details += "\n" + str(failure.stdout)[-4000:]
-        status = "PASSED" if failure is None else f"FAILED: {details}"
+        status = "PASSED" if failure is None else f"FAILED ({type(failure).__name__})"
         args.report.write_text(
-            f"Release smoke {status}\nPackage: {args.package}\n\n{launch_output}\n"
-            f"Process observations: {[sorted(value) for value in observations]}\n\n{activities}\n",
+            f"Release smoke {status}\nPackage: {args.package}\n"
+            f"Process samples: {len(observations)}\nRaw diagnostics omitted for privacy\n",
             encoding="utf-8")
         print(f"Release smoke {status}")
         if installed_by_smoke:
@@ -226,7 +221,7 @@ def main() -> None:
             if not args.keep_installed:
                 adb("uninstall", args.package)
     if failure is not None:
-        raise failure
+        raise RuntimeError("Release smoke failed; raw diagnostics omitted") from None
 
 
 if __name__ == "__main__":
