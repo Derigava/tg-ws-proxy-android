@@ -44,6 +44,13 @@ class ProductHeaderTest {
         composeRule.onNodeWithText("romanvht/ByeByeDPI").assertExists().assertHasClickAction()
     }
 
+    @Test fun aboutOffersAuthorSupport() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        composeRule.setContent { TgWsProxyTheme { InfoTab(com.amurcanov.tgwsproxy.SettingsStore(context)) } }
+        composeRule.onNodeWithText("Support the author").performScrollTo().assertHasClickAction()
+        composeRule.onNodeWithText("Optional — the app stays free").assertExists()
+    }
+
     @Test fun headerShowsProductBylineAndSectionWithoutTechPrefix() {
         composeRule.setContent { TgWsProxyTheme { BrandHeader(section = "Info") } }
         composeRule.onNodeWithText("ByeBye TGWS Proxy").assertExists()
