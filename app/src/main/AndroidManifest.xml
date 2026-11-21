@@ -33,6 +33,13 @@
         <package android:name="ru.dahl.messenger" />
         <package android:name="com.scriptsaz.litegram" />
         <package android:name="org.thunderdog.challegram" />
+        <!-- VPN application filter: see launchable apps without QUERY_ALL_PACKAGES
+             (Play Protect-compliant). Only the launcher intent is queried, so no
+             app's internal details become visible. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
@@ -87,6 +94,31 @@
             </intent-filter>
         </activity>
 
+        <!-- ByeByeDPI launcher shortcut (no confirmation, like the TG one). -->
+        <activity
+            android:name="com.amurcanov.tgwsproxy.DpiLauncherShortcutActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- ByeByeDPI external automation requires confirmation; VPN is never captured silently. -->
+        <activity
+            android:name="com.amurcanov.tgwsproxy.DpiShortcutActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.START" />
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.STOP" />
+                <action android:name="io.github.derigava.tgwsproxy.action.dpi.TOGGLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name="com.amurcanov.tgwsproxy.ProxyTilePreferencesActivity"
             android:exported="true"
@@ -110,6 +142,14 @@
         </service>
 
         <service
+            android:name="com.amurcanov.tgwsproxy.dpi.DpiStrategyTestService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs a user-initiated network strategy test with progress and cancellation while the screen is off" />
+        </service>
+
+        <service
             android:name="com.amurcanov.tgwsproxy.ProxyTileService"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true"
@@ -129,6 +169,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/share_paths" />
         </provider>
+
+        <receiver
+            android:name="com.amurcanov.tgwsproxy.ProxyNotificationStopReceiver"
+            android:exported="false" />
 
         <!-- Start on the system broadcast only when the user enabled autostart. -->
         <receiver

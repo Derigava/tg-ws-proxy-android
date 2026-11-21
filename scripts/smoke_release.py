@@ -58,9 +58,43 @@ def validate_runtime(observations: list[frozenset[int]], activities: str,
         raise ValueError("Release launcher activity did not remain resumed")
 
 
+def validate_no_vpn_started(services: str, package: str) -> None:
+    component = re.escape(package) + r"/(?:com\.amurcanov\.tgwsproxy)?\.dpi\.DpiVpnService"
+    if re.search(rf"(?m)^\s*\*\s+ServiceRecord\{{[^\n]*?\s{component}(?=[\s}}])", services):
+        raise ValueError("ByeByeDPI VPN started without an explicit user request")
+
+
 def has_resumed_activity(activities: str, package: str) -> bool:
     return any(re.search("resumedactivity", line, re.IGNORECASE) and
                re.search(re.escape(package) + r"/", line) for line in activities.splitlines())
+
+
+def startup_log_window(adb) -> str | None:
+    # Some emulator images allow reading logs but deny clearing their buffers.
+    clear = adb("logcat", "-b", "main", "-b", "system", "-b", "crash", "-b", "events", "-c", check=False)
+    if clear.returncode == 0:
+        return None
+    device_time = adb("shell", "date '+%m-%d %H:%M:%S.000'").stdout.strip()
+    if not re.fullmatch(r"\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.000", device_time):
+        raise ValueError("Could not determine the Android startup log window")
+    return device_time
+
+
+def filter_startup_logs(output: str, since: str | None) -> str:
+    if since is None:
+        return output
+    # Older logd implementations can return entries before a requested timestamp.
+    # Filter them here and retain continuation lines for entries in the window.
+    selected = []
+    recent = False
+    for line in output.splitlines():
+        stamp = re.match(r"^\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}", line)
+        if stamp:
+            timestamp = stamp.group()
+            recent = timestamp >= since or (since.startswith("12-31 ") and timestamp.startswith("01-01 "))
+        if recent:
+            selected.append(line)
+    return "\n".join(selected)
 
 
 def main() -> None:
@@ -100,6 +134,7 @@ def main() -> None:
     activities = ""
     diagnostics: dict[str, str] = {}
     failure: Exception | None = None
+    log_window: str | None = None
     try:
         if not args.skip_install:
             if "package:" in adb("shell", "pm", "path", args.package, check=False).stdout:
@@ -118,9 +153,7 @@ def main() -> None:
         if sdk >= 33:
             adb("shell", "pm", "grant", args.package, "android.permission.POST_NOTIFICATIONS")
         adb("shell", "am", "force-stop", args.package)
-        # Android 7 restricts privileged buffers selected by "all". Clear only
-        # the application/error buffers which this gate actually inspects.
-        adb("logcat", "-b", "main", "-b", "system", "-b", "crash", "-b", "events", "-c")
+        log_window = startup_log_window(adb)
         started = time.monotonic()
         launch_output = adb("shell", "am", "start", "-W", "-n", f"{args.package}/{args.activity}",
                             check=False, timeout=int(args.startup_timeout)).stdout
@@ -130,10 +163,13 @@ def main() -> None:
             crash = adb("logcat", "-d", "-b", "crash", "-v", "threadtime", timeout=15).stdout
             errors = adb("logcat", "-d", "-b", "main", "-b", "system", "-v", "threadtime",
                          "AndroidRuntime:E", "ActivityManager:E", "*:S", timeout=15).stdout
-            if owned_failure(crash, args.package) or owned_failure(errors, args.package):
+            if (owned_failure(filter_startup_logs(crash, log_window), args.package)
+                    or owned_failure(filter_startup_logs(errors, log_window), args.package)):
                 raise ValueError("Release crashed or became unresponsive during startup")
             pids = parse_pids(adb("shell", "pidof", args.package, check=False, timeout=15).stdout)
             activity_state = adb("shell", "dumpsys", "activity", "activities", timeout=15).stdout
+            services = adb("shell", "dumpsys", "activity", "services", args.package, timeout=15).stdout
+            validate_no_vpn_started(services, args.package)
             return pids, activity_state
 
         # Startup may be slow on loaded CI hosts. Do not mistake a pending first
@@ -158,27 +194,26 @@ def main() -> None:
     finally:
         for name, command in {
             "crash": ("logcat", "-d", "-b", "crash", "-v", "threadtime"),
-            "logcat": ("logcat", "-d", "-b", "all", "-v", "threadtime"),
-            "exit-info": ("shell", "dumpsys", "activity", "exit-info", args.package),
+            "logcat": ("logcat", "-d", "-b", "main", "-b", "system", "-b", "events", "-v", "threadtime", "AndroidRuntime:E", "ActivityManager:E", "am_anr:I", "*:S"),
         }.items():
             try:
                 diagnostics[name] = adb(*command, check=False, timeout=30).stdout
-                args.report.with_suffix(f".{name}.txt").write_text(diagnostics[name], encoding="utf-8")
-            except Exception as error:
-                diagnostics[name] = f"Diagnostic unavailable: {error}"
+            except Exception:
+                diagnostics[name] = ""
         if failure is None:
             try:
-                validate_runtime(observations, activities, diagnostics.get("crash", ""),
-                                 diagnostics.get("logcat", ""), args.package)
+                validate_runtime(
+                    observations, activities,
+                    filter_startup_logs(diagnostics.get("crash", ""), log_window),
+                    filter_startup_logs(diagnostics.get("logcat", ""), log_window),
+                    args.package,
+                )
             except Exception as error:
                 failure = error
-        details = str(failure)
-        if isinstance(failure, subprocess.CalledProcessError) and failure.stdout:
-            details += "\n" + str(failure.stdout)[-4000:]
-        status = "PASSED" if failure is None else f"FAILED: {details}"
+        status = "PASSED" if failure is None else f"FAILED ({type(failure).__name__})"
         args.report.write_text(
-            f"Release smoke {status}\nPackage: {args.package}\n\n{launch_output}\n"
-            f"Process observations: {[sorted(value) for value in observations]}\n\n{activities}\n",
+            f"Release smoke {status}\nPackage: {args.package}\n"
+            f"Process samples: {len(observations)}\nRaw diagnostics omitted for privacy\n",
             encoding="utf-8")
         print(f"Release smoke {status}")
         if installed_by_smoke:
@@ -186,7 +221,7 @@ def main() -> None:
             if not args.keep_installed:
                 adb("uninstall", args.package)
     if failure is not None:
-        raise failure
+        raise RuntimeError("Release smoke failed; raw diagnostics omitted") from None
 
 
 if __name__ == "__main__":

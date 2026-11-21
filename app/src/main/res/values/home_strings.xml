@@ -1,0 +1,22 @@
+<resources>
+    <string name="home_telegram">Telegram</string>
+    <string name="home_youtube">YouTube</string>
+    <string name="home_discord">Discord</string>
+    <string name="home_proxy">PROXY</string>
+    <string name="home_vpn">VPN</string>
+    <string name="home_tg_subtitle">Works alongside your VPN</string>
+    <string name="home_vpn_subtitle">Uses the Android VPN slot</string>
+    <string name="home_vpn_selection_warning">YouTube and Discord use Android’s VPN slot and may disconnect another VPN.</string>
+    <string name="home_vpn_warning">[!] Another VPN is active. To use YouTube or Discord, you may need to disconnect it. Telegram can continue working alongside it.</string>
+    <string name="home_socks_warning">SOCKS5 mode: configure your apps to use the proxy. It does not provide a VPN connection.</string>
+    <string name="home_start">Start selected services</string>
+    <string name="home_stop">Stop services</string>
+    <string name="home_socks_running">SOCKS5 proxy running; apps require configuration</string>
+    <string name="home_partial">Some selected services are not running</string>
+    <string name="home_select">Select at least one service</string>
+    <string name="home_repair">Not working? Fix it</string>
+    <string name="home_offer_title">Another VPN may be active</string>
+    <string name="home_offer_body">Starting the VPN may disconnect your current VPN. Telegram can work alongside it. Continue?</string>
+    <string name="home_offer_replace">Replace VPN</string>
+    <string name="home_offer_socks">Use SOCKS5 instead</string>
+</resources>

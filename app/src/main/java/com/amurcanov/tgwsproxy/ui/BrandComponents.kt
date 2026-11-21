@@ -3,7 +3,7 @@ package com.amurcanov.tgwsproxy.ui
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -51,22 +53,38 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.amurcanov.tgwsproxy.R
 
-/** Top of every screen: the mark on the left, where we are on the right, as in the brand's templates. */
+@Composable
+fun ProductByline(modifier: Modifier = Modifier) {
+    val cursorColor = Brand.accent
+    val byline = stringResource(R.string.app_byline)
+    val cursor = stringResource(R.string.product_cursor)
+    Text(
+        text = androidx.compose.ui.text.buildAnnotatedString {
+            append(byline)
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = cursorColor))
+            append(cursor)
+            pop()
+        },
+        modifier = modifier,
+        style = MonoLabelStyle,
+        color = Brand.muted
+    )
+}
+
+/** Product identity and the current section, shared by each screen. */
 @Composable
 fun BrandHeader(section: String, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(56.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter = painterResource(if (Brand.isDark) R.drawable.wordmark_dark else R.drawable.wordmark_light),
-            contentDescription = "derigava_",
-            modifier = Modifier.height(20.dp)
-        )
-        MonoLabel("TECH / ${section.uppercase()}")
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.app_name), color = Brand.ink, style = MaterialTheme.typography.titleLarge)
+            ProductByline()
+        }
+        Text(section.uppercase(), modifier = Modifier.weight(0.5f), style = MonoLabelStyle,
+            color = Brand.muted, textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 
@@ -188,13 +206,14 @@ fun BrandSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    interactive: Boolean = true,
 ) {
     val thumbOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "switch_thumb")
     val active = if (checked) Brand.accent else Brand.muted
     Box(
         contentAlignment = Alignment.CenterStart,
         modifier = modifier
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(if (interactive) Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange) else Modifier)
             .minimumInteractiveComponentSize()
             .alpha(if (enabled) 1f else 0.5f)
     ) {
@@ -225,7 +244,8 @@ fun SwitchRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp),
+            .heightIn(min = 52.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -235,7 +255,7 @@ fun SwitchRow(
             color = if (enabled) Brand.ink else Brand.muted,
             modifier = Modifier.weight(1f)
         )
-        BrandSwitch(checked, onCheckedChange, enabled = enabled)
+        BrandSwitch(checked, onCheckedChange, enabled = enabled, interactive = false)
     }
 }
 
@@ -335,7 +355,9 @@ fun BrandField(
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         textStyle = textStyle.copy(color = if (enabled) Brand.ink else Brand.muted),
         cursorBrush = SolidColor(Brand.accent),
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = 48.dp).then(
+            if (placeholder != null) Modifier.semantics { contentDescription = placeholder } else Modifier
+        ),
         decorationBox = { inner ->
             Box(
                 contentAlignment = Alignment.CenterStart,
@@ -346,6 +368,43 @@ fun BrandField(
             ) {
                 if (value.isEmpty() && placeholder != null) {
                     Text(placeholder, style = textStyle, color = Brand.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                inner()
+            }
+        }
+    )
+}
+
+/** Multi-line text input on a surface plate; used for host lists and other newline-delimited values. */
+@Composable
+fun BrandMultilineField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    enabled: Boolean = true,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        singleLine = false,
+        interactionSource = interaction,
+        textStyle = MonoValueStyle.copy(color = if (enabled) Brand.ink else Brand.muted),
+        cursorBrush = SolidColor(Brand.accent),
+        modifier = modifier.heightIn(min = 96.dp),
+        decorationBox = { inner ->
+            Box(
+                contentAlignment = Alignment.TopStart,
+                modifier = Modifier
+                    .background(Brand.surface)
+                    .then(if (focused) Modifier.border(1.dp, Brand.accent) else Modifier)
+                    .padding(horizontal = 12.dp, vertical = 12.dp)
+            ) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(placeholder, style = MonoValueStyle, color = Brand.muted)
                 }
                 inner()
             }

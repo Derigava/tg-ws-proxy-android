@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
+import subprocess
 import unittest
+from unittest.mock import Mock
 
 spec = importlib.util.spec_from_file_location("smoke_release", Path(__file__).resolve().parents[2] / "scripts" / "smoke_release.py")
 smoke = importlib.util.module_from_spec(spec)
@@ -11,6 +13,27 @@ JAVA_CRASH = "FATAL EXCEPTION: main\nProcess: io.github.derigava.tgwsproxy, PID:
 
 
 class ReleaseSmokeTest(unittest.TestCase):
+    def test_log_window_starts_at_device_time_when_buffer_clear_is_denied(self):
+        adb = Mock(side_effect=[
+            subprocess.CompletedProcess([], 1, "failed to clear the main log"),
+            subprocess.CompletedProcess([], 0, "11-20 23:45:00.000\n"),
+        ])
+        self.assertEqual(smoke.startup_log_window(adb), "11-20 23:45:00.000")
+
+    def test_log_window_stays_empty_after_successful_buffer_clear(self):
+        adb = Mock(return_value=subprocess.CompletedProcess([], 0, ""))
+        self.assertIsNone(smoke.startup_log_window(adb))
+        self.assertEqual(adb.call_count, 1)
+
+    def test_old_logd_can_return_stale_logs_without_hiding_a_fresh_crash(self):
+        stale = f"11-20 23:44:59.900 123 123 E AndroidRuntime: Process: {PACKAGE}, PID: 123"
+        fresh = f"11-20 23:45:00.010 456 456 E AndroidRuntime: Process: {PACKAGE}, PID: 456"
+        raw = f"{stale}\nstale details\n{fresh}\nfresh details\n"
+        self.assertEqual(
+            smoke.filter_startup_logs(raw, "11-20 23:45:00.000"),
+            f"{fresh}\nfresh details",
+        )
+
     def test_real_release_startup_crash_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "crashed"):
             smoke.validate_runtime([frozenset({123})], RESUMED, JAVA_CRASH, "")
@@ -23,6 +46,13 @@ class ReleaseSmokeTest(unittest.TestCase):
         for text in (f"pid:123 >>> {PACKAGE} <<<", f"Cmdline: {PACKAGE}", f"ANR in {PACKAGE}\nReason: timeout"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 smoke.validate_runtime([frozenset({123})], RESUMED, text, "")
+
+    def test_launcher_does_not_start_the_owned_vpn(self):
+        foreign = "  * ServiceRecord{123 u0 org.example/org.example.DpiVpnService}"
+        own = f"  * ServiceRecord{{456 u0 {PACKAGE}/com.amurcanov.tgwsproxy.dpi.DpiVpnService}}"
+        smoke.validate_no_vpn_started(foreign, PACKAGE)
+        with self.assertRaisesRegex(ValueError, "VPN started without"):
+            smoke.validate_no_vpn_started(f"{foreign}\n{own}", PACKAGE)
 
     def test_dead_or_restarted_process_cannot_pass(self):
         for observations in ([], [frozenset()], [frozenset({123}), frozenset()], [frozenset({123}), frozenset({124})]):
