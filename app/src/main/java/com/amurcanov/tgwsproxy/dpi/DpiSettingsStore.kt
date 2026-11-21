@@ -34,6 +34,14 @@ internal class DpiSettingsStore(context: Context) {
     fun exportJson(): String = preferences.getString("backup", null)
         ?: document().put("settings", JSONObject()).toString()
 
+    fun observeDocument(onChange: (String) -> Unit): () -> Unit {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "backup") onChange(exportJson())
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        return { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     fun exportPortableBackup(): String = JSONObject(exportJson())
         .put("tgwsBackupVersion", 1)
         .put("successfulStrategies", JSONArray(successfulStrategies()))

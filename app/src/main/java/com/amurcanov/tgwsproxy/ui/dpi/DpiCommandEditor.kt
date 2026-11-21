@@ -2,6 +2,7 @@ package com.amurcanov.tgwsproxy.ui.dpi
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,19 +27,22 @@ import com.amurcanov.tgwsproxy.ui.SwitchRow
 internal fun DpiCommandEditor() {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    val document = rememberDpiDocument(store)
+    var saveError by remember(document) { mutableStateOf(false) }
 
-    var enabled by remember {
+    var enabled by remember(document) {
         mutableStateOf(((store.currentSettings()["byedpi_enable_cmd_settings"] as? Boolean) ?: true))
     }
-    var args by remember { mutableStateOf((store.currentSettings()["byedpi_cmd_args"] as? String) ?: "") }
+    var args by remember(document) { mutableStateOf((store.currentSettings()["byedpi_cmd_args"] as? String) ?: "") }
 
+    if (saveError) Text(stringResource(R.string.dpi_edit_unsaved))
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         SwitchRow(
             title = stringResource(R.string.dpi_cmd_use_command_line),
             checked = enabled,
             onCheckedChange = { value ->
                 enabled = value
-                runCatching { store.updateSettings(mapOf("byedpi_enable_cmd_settings" to value)) }
+                saveError = runCatching { store.updateSettings(mapOf("byedpi_enable_cmd_settings" to value)) }.isFailure
             },
         )
         if (enabled) {
@@ -47,7 +51,7 @@ internal fun DpiCommandEditor() {
                 value = args,
                 onValueChange = { value ->
                     args = value
-                    runCatching { store.updateSettings(mapOf("byedpi_cmd_args" to value)) }
+                    saveError = runCatching { store.updateSettings(mapOf("byedpi_cmd_args" to value)) }.isFailure
                 },
                 placeholder = stringResource(R.string.dpi_cmd_args_hint),
             )

@@ -71,6 +71,20 @@ class DpiSettingsStoreTest {
         assertEquals(3456, second.port)
     }
 
+    @Test fun observersSeeImportAndResetFromOtherStoreInstances() {
+        store.resetSettings()
+        val seen = mutableListOf<String>()
+        val stop = store.observeDocument { seen.add(it) }
+        val other = DpiSettingsStore(context)
+        other.importJson(fixture)
+        other.resetSettings()
+        stop()
+        other.importJson(fixture)
+        assertEquals(2, seen.size)
+        assertTrue(JSONObject(seen[0]).has("apps"))
+        assertFalse(JSONObject(seen[1]).has("apps"))
+    }
+
     @Test fun pinnedFormatRoundTripsAllSectionsWithoutTgKeys() {
         store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"secret_key\":\"not-for-export\""))
         val output = JSONObject(store.exportJson())

@@ -78,8 +78,7 @@ internal fun DpiBackupActions() {
         BrandOutlineButton(stringResource(R.string.dpi_backup_import), { importDocument.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy)
         BrandOutlineButton(stringResource(R.string.dpi_backup_export), { confirmExport = true }, enabled = !busy)
         BrandOutlineButton(stringResource(R.string.dpi_backup_reset), {
-            store.resetSettings()
-            result = R.string.dpi_backup_reset_done
+            result = if (runCatching { store.resetSettings() }.isSuccess) R.string.dpi_backup_reset_done else R.string.dpi_backup_error
         }, enabled = !busy)
         result?.let { Text(stringResource(it)) }
     }
