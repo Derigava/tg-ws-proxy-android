@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amurcanov.tgwsproxy.DpiSession
 import com.amurcanov.tgwsproxy.R
-import com.amurcanov.tgwsproxy.dpi.DpiProbeTarget
+import com.amurcanov.tgwsproxy.ServiceSelectionStore
 import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
 import com.amurcanov.tgwsproxy.dpi.DpiState
 import com.amurcanov.tgwsproxy.dpi.DpiStrategyTestService
@@ -36,6 +36,8 @@ import com.amurcanov.tgwsproxy.ui.MonoLabel
 internal fun DpiStrategyTestDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
+    val selectionStore = remember(context) { ServiceSelectionStore(context) }
+    val selection by selectionStore.changes.collectAsStateWithLifecycle(initialValue = selectionStore.read())
     val test by DpiStrategyTestService.state.collectAsStateWithLifecycle()
     val dpiState by DpiSession.state.collectAsStateWithLifecycle()
     val available = dpiState == DpiState.Off
@@ -56,7 +58,8 @@ internal fun DpiStrategyTestDialog(onDismiss: () -> Unit) {
         modifier = Modifier.fillMaxWidth(0.92f),
     ) {
         Text(stringResource(R.string.dpi_strategy_test), style = MaterialTheme.typography.titleLarge, color = Brand.ink)
-        Text(stringResource(R.string.dpi_strategy_test_description), color = Brand.muted)
+        Text(stringResource(R.string.repair_probe_description), color = Brand.muted)
+        if (!selection.needsDpi) MonoLabel(stringResource(R.string.repair_no_dpi_targets))
         if (!available && test.message != R.string.dpi_strategy_test_busy) {
             MonoLabel(stringResource(R.string.dpi_strategy_test_busy))
         }
@@ -80,7 +83,7 @@ internal fun DpiStrategyTestDialog(onDismiss: () -> Unit) {
                 onClick = { DpiStrategyTestService.stop(context) },
             )
         } else {
-            BrandButton(text = stringResource(R.string.dpi_strategy_test_start), enabled = available, onClick = {
+            BrandButton(text = stringResource(R.string.dpi_strategy_test_start), enabled = available && selection.needsDpi, onClick = {
                 applyFailed = false
                 DpiStrategyTestService.start(context)
             })
@@ -103,8 +106,8 @@ internal fun DpiStrategyTestDialog(onDismiss: () -> Unit) {
                     }
                 }
                 ranked.forEach { result ->
-                    MonoLabel(stringResource(R.string.dpi_strategy_test_score, result.reachable, DpiProbeTarget.entries.size))
-                    val missing = DpiProbeTarget.entries.filter { it !in result.reached }
+                    MonoLabel(stringResource(R.string.dpi_strategy_test_score, result.reachable, result.targets.size))
+                    val missing = result.targets.filter { it !in result.reached }
                     if (missing.isNotEmpty()) {
                         val hosts = missing.joinToString(", ") { it.host }
                         MonoLabel(stringResource(R.string.dpi_strategy_test_unreachable, hosts))

@@ -176,7 +176,7 @@ internal class DpiSettingsStore(context: Context) {
     }
 
     fun saveSuccessfulStrategy(result: DpiStrategyResult) {
-        if (result.startFailed || result.reachable != DpiProbeTarget.entries.size) return
+        if (result.startFailed || result.targets.isEmpty() || !result.reached.containsAll(result.targets)) return
         val saved = successfulStrategies()
         val command = result.candidate.command
         if (command in saved) return
