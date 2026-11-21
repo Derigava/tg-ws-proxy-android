@@ -76,19 +76,23 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Verify the committed upstream source
         id: upstream
-        run: python scripts/sync_upstream.py --check
+        run: |
+          python scripts/sync_upstream.py --check
+          python scripts/sync_byebyedpi.py --check
       - name: Resolve release metadata
         id: release
         env:
           PRIVATE: ${{ github.event.repository.private }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "version_code=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
           # VERSION holds MAJOR.MINOR; the next free patch on that line names the build.
-          # The updater compares versionCode, so the name can follow the changelog.
           line="$(tr -d '[:space:]' < VERSION)"
           tags="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$line." --jq '.[].ref | sub("refs/tags/"; "")')"
-          echo "version_name=$(printf '%s\n' "$tags" | python scripts/release_version.py version --line "$line")" >> "$GITHUB_OUTPUT"
+          name="$(printf '%s\n' "$tags" | python scripts/release_version.py version --line "$line")"
+          # The updater compares versionCode, so it is derived from the name:
+          # major*10000 + minor*100 + patch keeps every build above the published ones.
+          echo "version_name=$name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$(python scripts/release_version.py code "$name")" >> "$GITHUB_OUTPUT"
           if [[ "$PRIVATE" == "true" ]]; then
             echo 'updates_enabled=false' >> "$GITHUB_OUTPUT"
           else
@@ -125,17 +129,19 @@ jobs:
           python -m pip install -r scripts/requirements-test.txt
           python scripts/run_python_tests.py
       - name: Install Android SDK platform and tools
-        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
-      - name: JVM tests and unsigned ARM64 release
+        run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: JVM tests, emulator APK, and unsigned ARM64 release
         id: package
         run: |
           java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain \
-            :app:testArm64DebugUnitTest :app:assembleArm64Release \
+            :dpi-runtime:testDebugUnitTest :app:testArm64DebugUnitTest \
+            :app:assembleEmulatorDebug :app:assembleArm64Release \
             -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" \
             -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
           mkdir -p unsigned
           cp app/build/outputs/apk/arm64/release/*-unsigned.apk unsigned/app-arm64-unsigned.apk
           python scripts/check_apk.py unsigned/app-arm64-unsigned.apk
+          python scripts/check_apk.py app/build/outputs/apk/emulator/debug/*-debug.apk --abi x86_64
           AAPT2="$ANDROID_HOME/build-tools/36.0.0/aapt2" \
             python scripts/check_permissions.py unsigned/app-arm64-unsigned.apk
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 -v 4 unsigned/app-arm64-unsigned.apk
@@ -148,6 +154,47 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  pr-arm64-apk:
+    if: github.event_name == 'pull_request'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-unsigned-apk
+          path: unsigned
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+      - name: Sign and verify ARM64 test APK
+        env:
+          APK_SHA256: ${{ needs.verify.outputs.apk_sha256 }}
+        run: |
+          set -euo pipefail
+          printf '%s  unsigned/app-arm64-unsigned.apk\n' "$APK_SHA256" | sha256sum --check
+          sdkmanager 'build-tools;36.0.0'
+          test_key="$RUNNER_TEMP/tgws-pr-test.p12"
+          keytool -genkeypair -noprompt -keystore "$test_key" -storepass android \
+            -alias tgws-pr-test -dname 'CN=TGWS Pull Request Test' -keyalg RSA -keysize 2048 -validity 365
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          apk="tgwsproxy-pr-test-arm64.apk"
+          "$apksigner" sign --ks "$test_key" --ks-pass pass:android --ks-key-alias tgws-pr-test \
+            --out "$apk" unsigned/app-arm64-unsigned.apk
+          "$apksigner" verify --min-sdk-version 24 --verbose --print-certs -Werr "$apk"
+      - name: Upload installable ARM64 test APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pr-test-apk-arm64
+          path: tgwsproxy-pr-test-arm64.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   android:
     needs: [prepare, verify]
     runs-on: ubuntu-24.04
@@ -158,6 +205,14 @@ jobs:
         include:
           - api: 24
             target: default
+            pages: 4096
+            ram: 2048M
+          - api: 25
+            target: google_apis
+            pages: 4096
+            ram: 2048M
+          - api: 26
+            target: google_apis
             pages: 4096
             ram: 2048M
           - api: 35
@@ -185,7 +240,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
       - name: Build test packages before starting the emulator
         run: |
-          sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
+          sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
           test_key="$RUNNER_TEMP/tgws-debug.jks"
           keytool -genkeypair -noprompt -keystore "$test_key" -storepass android -keypass android -alias androiddebugkey -dname 'CN=TGWS Android Tests' -keyalg RSA -keysize 2048 -validity 2 -storetype JKS
           java -classpath gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain :app:assembleEmulatorRelease :app:assembleEmulatorDebug :app:assembleEmulatorDebugAndroidTest -PtestKeystore="$test_key" -PappVersionCode="$APP_VERSION_CODE" -PappVersionName="$APP_VERSION_NAME" -PappUpdatesEnabled="$APP_UPDATES_ENABLED" --stacktrace
@@ -385,5 +440,5 @@ jobs:
           python scripts/release_version.py notes --version "$APP_VERSION_NAME" \
             --version-code "$APP_VERSION_CODE" --core-version "$CORE_VERSION" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
-            --target "$(git rev-parse HEAD)" --title "TG WS Proxy Android $APP_VERSION_NAME" \
+            --target "$(git rev-parse HEAD)" --title "ByeBye TGWS Proxy Android $APP_VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"

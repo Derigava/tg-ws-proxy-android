@@ -2,6 +2,28 @@
 
 Раздел с номером собираемой версии попадает в начало текста релиза на GitHub. Линейка версий задаётся в файле `VERSION`, патч CI подбирает сам.
 
+## 1.2.0
+
+### Второй модуль: ByeByeDPI
+
+- Одно приложение вместо двух: слева TG-WS с локальным MTProto-прокси, справа ByeByeDPI на снимке `romanvht/ByeByeDPI` v.1.8.2. По умолчанию DPI работает как системный VPN на весь телефон, второй режим — локальный SOCKS5 на `127.0.0.1:1080`. Оба режима без root, TG-WS работает вместе с каждым из них.
+- Подбор и история стратегий, параметры desync, списки доменов, фильтр приложений, импорт и экспорт настроек ByeByeDPI, диагностика, логи с разделением по источнику, ярлыки, плитка быстрых настроек и управление пультом.
+- VPN захватывается только по явному согласию: если работает другой VPN, приложение предлагает замену, SOCKS5 или отмену и не отзывает чужой туннель молча.
+
+### Имя, иконка, «О проекте»
+
+- Приложение называется **ByeBye TGWS Proxy**: под иконкой, в системных настройках, в заголовках и разделе «О проекте». `applicationId`, package name и идентификаторы не менялись, поэтому обновление ставится поверх установленной версии.
+- Иконка — знак маршрута: adaptive с монохромной и круглой версиями, плюс растровые варианты иконки и круглого значка для лаунчеров Android 7 и ниже.
+- В «О проекте» три ссылки на исходники: это приложение, ядро Flowseal и основа DPI `romanvht/ByeByeDPI`.
+- Нижний технический блок с версией и лицензиями убран. Последний элемент раздела — предупреждение «Неофициальное приложение, не связано с Telegram»; тексты лицензий и уведомления сторонних компонентов остались в APK.
+- `versionName` 1.2.0. `versionCode` теперь выводится из имени сборки (`major*10000 + minor*100 + patch` = 10200), поэтому каждая следующая сборка строго выше предыдущей и обновление её видит.
+
+### English
+
+One app instead of two: TG-WS runs the local MTProto proxy and ByeByeDPI (`romanvht/ByeByeDPI` v.1.8.2) runs as a device-wide VPN or a local SOCKS5 proxy without root, including strategy search and history, desync parameters, domain lists, app filter, settings import/export, diagnostics, per-source logs, shortcuts, the quick-settings tile and remote navigation. The app asks before replacing another active VPN.
+
+The app is now called **ByeBye TGWS Proxy** in the launcher, system settings, headers and the About section; the package and identifiers are unchanged, so it installs over the previous version. The launcher icon is the route mark with adaptive, round, monochrome and legacy bitmap variants. About lists the three sources (this app, the Flowseal core and `romanvht/ByeByeDPI`) and ends with the disclaimer "Unofficial app, not affiliated with Telegram."; the version/license footer is gone while the license texts stay in the APK. `versionName` is 1.2.0 and `versionCode` is derived from the name (10200), so every build stays above the previous one.
+
 ## 1.1.2
 
 ### Обход перестал работать в режиме CloudFlare CDN

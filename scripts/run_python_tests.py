@@ -12,7 +12,7 @@ CORE_TESTS = ("bridge", "cf_h2", "config", "event_loop", "fake_tls", "h2_routing
 if __name__ == "__main__":
     subprocess.run([sys.executable, str(ROOT / "scripts/sync_upstream.py"), "--check"], check=True)
     targets = [str(ROOT / f"upstream/flowseal/tests/test_{name}.py") for name in CORE_TESTS]
-    targets += [str(ROOT / "tests/python"), str(ROOT / "tests/scripts")]
+    targets += [str(ROOT / "tests")]
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "upstream/flowseal"), str(ROOT / "app/src/main/python"), env.get("PYTHONPATH", "")])
     raise SystemExit(subprocess.call([sys.executable, "-m", "pytest", "--import-mode=importlib", "-q", *targets], cwd=ROOT, env=env))

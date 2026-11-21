@@ -57,7 +57,7 @@ object ProxyJournal {
         val folder = File(context.cacheDir, "share").apply { mkdirs() }
         val out = File(folder, "tgwsproxy-log.txt")
         out.bufferedWriter(Charsets.UTF_8).use { writer ->
-            writer.appendLine("TG WS Proxy ${BuildConfig.VERSION_NAME}, core ${BuildConfig.CORE_VERSION}")
+            writer.appendLine("${context.getString(R.string.app_name)} ${BuildConfig.VERSION_NAME}, core ${BuildConfig.CORE_VERSION}")
             sources.forEach { source -> source.bufferedReader(Charsets.UTF_8).use { it.copyTo(writer) } }
         }
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.logs", out)

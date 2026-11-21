@@ -71,6 +71,18 @@ class IntegrityTests(unittest.TestCase):
 
 
 class ApkTests(unittest.TestCase):
+    def test_both_dpi_libraries_required_for_selected_abi(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("lib/x86_64/libbyedpi.so", elf())
+                archive.writestr("lib/arm64-v8a/libhev-socks5-tunnel.so", elf())
+            with self.assertRaisesRegex(ValueError, "libhev-socks5-tunnel"):
+                apk_check.check_dpi_libraries(apk, "x86_64")
+            with zipfile.ZipFile(apk, "a") as archive:
+                archive.writestr("lib/x86_64/libhev-socks5-tunnel.so", elf())
+            self.assertEqual(apk_check.check_dpi_libraries(apk, "x86_64"), 2)
+
     def test_old_4k_native_binary_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "16 KB"):
             apk_check.load_alignments(elf(4096))
@@ -178,8 +190,46 @@ class PermissionTests(unittest.TestCase):
             "io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
         })
 
+    def test_vpn_service_requires_protection_and_legacy_actions(self):
+        tree = '''
+E: manifest
+  E: application
+    E: service
+      A: android:name="com.amurcanov.tgwsproxy.dpi.DpiVpnService"
+      A: android:permission="android.permission.BIND_VPN_SERVICE"
+      A: android:exported=false
+      E: intent-filter
+        E: action
+          A: android:name="android.net.VpnService"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.ProxyShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.TOGGLE"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.DpiShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.TOGGLE"
+'''
+        permissions.check_components(tree, "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "BIND_VPN_SERVICE"):
+            permissions.check_components(tree.replace("BIND_VPN_SERVICE", "INTERNET"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "TG actions"):
+            permissions.check_components(tree.replace("action.TOGGLE", "action.CHANGED"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "ByeByeDPI actions"):
+            permissions.check_components(tree.replace("action.dpi.TOGGLE", "action.dpi.CHANGED"), "io.github.derigava.tgwsproxy")
+
     def test_expected_permissions_pass(self):
-        permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")
+        permissions.check(set(permissions.ALLOWED) | {"io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"}, "io.github.derigava.tgwsproxy")
 
     def test_install_permission_is_named_in_the_error(self):
         declared = permissions.parse_permissions(self.badging) | {"android.permission.REQUEST_INSTALL_PACKAGES"}
@@ -213,6 +263,23 @@ class ReleaseVersionTests(unittest.TestCase):
 
     def test_next_patch_follows_the_highest_tag_on_the_line(self):
         self.assertEqual(release.next_version("1.1", ["v1.1.0", "v1.1.10", "v1.1.2", "v1.10.5"]), "1.1.11")
+
+    def test_version_code_is_derived_from_the_name(self):
+        self.assertEqual(release.version_code("1.2.0"), 10200)
+        self.assertEqual(release.version_code("1.2.1"), 10201)
+        self.assertEqual(release.version_code("1.3.0"), 10300)
+        self.assertEqual(release.version_code("v2.0.0"), 20000)
+
+    def test_version_code_stays_above_the_published_builds(self):
+        # Published builds used 1000 + CI run number; the 1.1.4 release was 1069.
+        self.assertGreater(release.version_code("1.2.0"), 1069)
+        self.assertGreater(release.version_code("1.2.1"), release.version_code("1.2.0"))
+
+    def test_version_code_rejects_a_bad_name(self):
+        with self.assertRaises(ValueError):
+            release.version_code("1.2")
+        with self.assertRaises(ValueError):
+            release.version_code("1.100.0")
 
     def test_version_file_must_be_major_minor(self):
         with tempfile.TemporaryDirectory() as folder:

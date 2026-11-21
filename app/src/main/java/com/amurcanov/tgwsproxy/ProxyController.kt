@@ -7,6 +7,8 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.first
 
 object ProxyController {
+    private val commandLock = Any()
+    private var stopGeneration = 0L
 
     /** Same as Flowseal's desktop default (`ProxyConfig.dc_redirects`). */
     const val AUTO_DC_IPS =
@@ -16,6 +18,7 @@ object ProxyController {
         context: Context,
         showInvalidPortToast: Boolean = false
     ): Boolean {
+        val generation = synchronized(commandLock) { stopGeneration }
         val settingsStore = SettingsStore(context)
         settingsStore.migrateLegacyDefaults()
         val portText = settingsStore.port.first()
@@ -37,7 +40,7 @@ object ProxyController {
         val customCfDomainEnabled = settingsStore.customCfDomainEnabled.first()
         val customCfDomain = settingsStore.customCfDomain.first().trim()
         val cfWorkerDomain = settingsStore.cfWorkerDomain.first().trim()
-        val secretKey = ensureSecretKey(settingsStore)
+        val secretKey = settingsStore.ensureSecretKey()
 
         // "Auto" keeps Flowseal's own default route: direct WebSocket to DC2
         // and DC4 first, Cloudflare only as fallback. An empty list would make
@@ -60,47 +63,42 @@ object ProxyController {
             }
         }.joinToString(",")
 
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, ProxyService::class.java).apply {
-                action = ProxyService.ACTION_START
-                putExtra(ProxyService.EXTRA_BIND_IP, bindIp)
-                putExtra(ProxyService.EXTRA_PORT, port)
-                putExtra(ProxyService.EXTRA_IPS, parsedIps)
-                putExtra(ProxyService.EXTRA_POOL_SIZE, poolSize)
-                putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, cfEnabled)
-                putExtra(ProxyService.EXTRA_CF_DISABLE_TLS, cfDisableTls)
-                putExtra(ProxyService.EXTRA_CFPROXY_PRIORITY, true)
-                putExtra(
-                    ProxyService.EXTRA_CFPROXY_DOMAIN,
-                    if (customCfDomainEnabled && cfEnabled) customCfDomain else ""
-                )
-                putExtra(ProxyService.EXTRA_CF_WORKER_DOMAIN, cfWorkerDomain)
-                putExtra(ProxyService.EXTRA_SECRET_KEY, secretKey)
-            }
-        )
+        synchronized(commandLock) {
+            if (generation != stopGeneration) return false
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, ProxyService::class.java).apply {
+                    action = ProxyService.ACTION_START
+                    putExtra(ProxyService.EXTRA_BIND_IP, bindIp)
+                    putExtra(ProxyService.EXTRA_PORT, port)
+                    putExtra(ProxyService.EXTRA_IPS, parsedIps)
+                    putExtra(ProxyService.EXTRA_POOL_SIZE, poolSize)
+                    putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, cfEnabled)
+                    putExtra(ProxyService.EXTRA_CF_DISABLE_TLS, cfDisableTls)
+                    putExtra(ProxyService.EXTRA_CFPROXY_PRIORITY, true)
+                    putExtra(
+                        ProxyService.EXTRA_CFPROXY_DOMAIN,
+                        if (customCfDomainEnabled && cfEnabled) customCfDomain else ""
+                    )
+                    putExtra(ProxyService.EXTRA_CF_WORKER_DOMAIN, cfWorkerDomain)
+                    putExtra(ProxyService.EXTRA_SECRET_KEY, secretKey)
+                }
+            )
+        }
         ProxyTileService.requestSync(context)
         return true
     }
 
     fun stop(context: Context) {
-        context.startService(
-            Intent(context, ProxyService::class.java).apply {
-                action = ProxyService.ACTION_STOP
-            }
-        )
-        ProxyTileService.requestSync(context)
-    }
-
-    private suspend fun ensureSecretKey(settingsStore: SettingsStore): String {
-        val current = settingsStore.secretKey.first().trim()
-        if (isValidSecret(current)) {
-            return current
+        synchronized(commandLock) {
+            stopGeneration++
+            context.startService(
+                Intent(context, ProxyService::class.java).apply {
+                    action = ProxyService.ACTION_STOP
+                }
+            )
         }
-
-        val generated = generateRandomSecret()
-        settingsStore.saveSecretKey(generated)
-        return generated
+        ProxyTileService.requestSync(context)
     }
 
     private fun MutableList<String>.appendDc(dc: Int, value: String) {
@@ -110,13 +108,4 @@ object ProxyController {
         }
     }
 
-    private fun generateRandomSecret(): String {
-        val bytes = ByteArray(16)
-        java.security.SecureRandom().nextBytes(bytes)
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
-
-    private fun isValidSecret(value: String): Boolean {
-        return value.length == 32 && value.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
-    }
 }

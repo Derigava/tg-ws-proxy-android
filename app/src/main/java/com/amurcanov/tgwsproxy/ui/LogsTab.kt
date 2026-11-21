@@ -27,6 +27,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.amurcanov.tgwsproxy.DpiSession
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,7 +48,10 @@ import kotlinx.coroutines.launch
 fun LogsTab(settingsStore: SettingsStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val currentLogs by LogManager.logs.collectAsStateWithLifecycle()
+    var showDpiLogs by rememberSaveable { mutableStateOf(false) }
+    val tgLogs by LogManager.logs.collectAsStateWithLifecycle()
+    val dpiLogs by DpiSession.logs.collectAsStateWithLifecycle()
+    val currentLogs = if (showDpiLogs) dpiLogs else tgLogs
 
     val savedInfo by settingsStore.logShowInfo.collectAsStateWithLifecycle(initialValue = SettingsStore.DEFAULT_LOG_SHOW_INFO)
     val savedError by settingsStore.logShowError.collectAsStateWithLifecycle(initialValue = SettingsStore.DEFAULT_LOG_SHOW_ERROR)
@@ -99,7 +104,9 @@ fun LogsTab(settingsStore: SettingsStore) {
         ) {
             ScreenTitle(stringResource(R.string.nav_logs))
             Row {
-                MonoAction(text = stringResource(R.string.clear), onClick = { LogManager.clearLogs() })
+                MonoAction(text = stringResource(R.string.clear), onClick = {
+                    if (showDpiLogs) DpiSession.clearLogs() else LogManager.clearLogs()
+                })
                 MonoAction(
                     text = stringResource(R.string.copy),
                     onClick = {
@@ -112,8 +119,13 @@ fun LogsTab(settingsStore: SettingsStore) {
             }
         }
 
+        BrandSegmented(
+            options = listOf(false to stringResource(R.string.dpi_logs_source_tg), true to stringResource(R.string.dpi_logs_source_dpi)),
+            selected = showDpiLogs,
+            onSelect = { showDpiLogs = it },
+        )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             SegmentCell("INFO", savedInfo && !savedNull, modifier = Modifier.weight(1f)) {
