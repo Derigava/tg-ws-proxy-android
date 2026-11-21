@@ -88,6 +88,13 @@ class DpiSettingsStoreTest {
         assertEquals(listOf("-o2"), options.args)
     }
 
+    @Test fun groupedFlagsSurviveEndpointExtraction() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_cmd_args":"-DNp2345 -FXi127.0.0.1 -o2"}}""")
+        val options = store.connectionOptions()
+        assertEquals(2345, options.port)
+        assertEquals(listOf("-DN", "-FX", "-o2"), options.args)
+    }
+
     @Test fun commandListPlaceholderExpandsDomains() {
         store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_enable_cmd_settings":true,"byedpi_cmd_args":"-H{list:blocked}"},"domainLists":[{"id":"1","name":"blocked","domains":["a.com"]}]}""")
         assertEquals(listOf("-Ha.com"), store.connectionOptions().args)

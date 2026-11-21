@@ -567,6 +567,7 @@ internal class DpiSettingsStore(context: Context) {
                     val key = arg[position]
                     if (key in "DNXUhvEFSZY") continue
                     if (key == 'i' || key == 'p') {
+                        if (position > 1) result.add(arg.substring(0, position))
                         if (arg.substring(position + 1).isEmpty()) index++
                         consumedValue = true
                     }
