@@ -76,6 +76,8 @@
     <string name="original_tg_ws_proxy_subtitle">Исходная идея и код от Flowseal</string>
     <string name="useful_material">Полезный материал</string>
     <string name="useful_material_subtitle">Заметки о работе прокси от IMDelewer</string>
+    <string name="support_author">Поддержать автора</string>
+    <string name="support_author_subtitle">По желанию — приложение бесплатное</string>
     <string name="unofficial_notice">Неофициальное приложение, не связано с Telegram.</string>
     <string name="update_postponed_24h">Обновление отложено на 24 часа</string>
     <string name="help_auto_dc_title">Авто и адреса датацентров</string>

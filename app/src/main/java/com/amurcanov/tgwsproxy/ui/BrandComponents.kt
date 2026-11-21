@@ -13,14 +13,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
@@ -462,6 +465,39 @@ fun ActionRow(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Brand.muted)
         }
         Text("→", style = MonoValueStyle, color = Brand.muted)
+    }
+}
+
+/** Optional support action: a surface plate with an accent bar, quieter than a filled button. */
+@Composable
+fun SupportPlate(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .background(Brand.surface)
+            .clickable(role = Role.Button, onClick = onClick)
+    ) {
+        // Full-height bar: the intrinsic height is set by the text column, not by the bar.
+        Box(Modifier.width(4.dp).fillMaxHeight().background(Brand.accent))
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = Brand.ink)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Brand.muted)
+            }
+            Text("→", style = MonoValueStyle, color = Brand.accent)
+        }
     }
 }
 
