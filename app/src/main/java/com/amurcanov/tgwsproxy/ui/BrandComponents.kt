@@ -187,13 +187,14 @@ fun BrandSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    interactive: Boolean = true,
 ) {
     val thumbOffset by animateDpAsState(if (checked) 23.dp else 3.dp, label = "switch_thumb")
     val active = if (checked) Brand.accent else Brand.muted
     Box(
         contentAlignment = Alignment.CenterStart,
         modifier = modifier
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(if (interactive) Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange) else Modifier)
             .minimumInteractiveComponentSize()
             .alpha(if (enabled) 1f else 0.5f)
     ) {
@@ -224,7 +225,8 @@ fun SwitchRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp),
+            .heightIn(min = 52.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -234,7 +236,7 @@ fun SwitchRow(
             color = if (enabled) Brand.ink else Brand.muted,
             modifier = Modifier.weight(1f)
         )
-        BrandSwitch(checked, onCheckedChange, enabled = enabled)
+        BrandSwitch(checked, onCheckedChange, enabled = enabled, interactive = false)
     }
 }
 
