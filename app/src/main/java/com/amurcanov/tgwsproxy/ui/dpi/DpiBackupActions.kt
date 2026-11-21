@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -29,6 +31,7 @@ internal fun DpiBackupActions() {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<Int?>(null) }
+    var confirmExport by remember { mutableStateOf(false) }
 
     fun runOperation(uri: Uri?, success: Int, operation: (Uri) -> Unit) {
         if (uri == null || busy) return
@@ -66,18 +69,27 @@ internal fun DpiBackupActions() {
     }
     val exportDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         runOperation(uri, R.string.dpi_backup_exported) { destination ->
-            val json = store.exportJson().toByteArray(Charsets.UTF_8)
+            val json = store.exportPortableBackup().toByteArray(Charsets.UTF_8)
             requireNotNull(resolver.openOutputStream(destination, "wt")).use { it.write(json) }
         }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BrandOutlineButton(stringResource(R.string.dpi_backup_import), { importDocument.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy)
-        BrandOutlineButton(stringResource(R.string.dpi_backup_export), { exportDocument.launch("byebyedpi-backup.json") }, enabled = !busy)
+        BrandOutlineButton(stringResource(R.string.dpi_backup_export), { confirmExport = true }, enabled = !busy)
         BrandOutlineButton(stringResource(R.string.dpi_backup_reset), {
             store.resetSettings()
             result = R.string.dpi_backup_reset_done
         }, enabled = !busy)
         result?.let { Text(stringResource(it)) }
+    }
+    if (confirmExport) {
+        AlertDialog(
+            onDismissRequest = { confirmExport = false },
+            title = { Text(stringResource(R.string.dpi_backup_export)) },
+            text = { Text(stringResource(R.string.dpi_backup_contents)) },
+            confirmButton = { TextButton(onClick = { confirmExport = false; exportDocument.launch("byebyedpi-backup.json") }) { Text(stringResource(R.string.dpi_backup_export)) } },
+            dismissButton = { TextButton(onClick = { confirmExport = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 }

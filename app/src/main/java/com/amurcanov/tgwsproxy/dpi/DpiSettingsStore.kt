@@ -29,11 +29,23 @@ internal class DpiSettingsStore(context: Context) {
     fun exportJson(): String = preferences.getString("backup", null)
         ?: document().put("settings", JSONObject()).toString()
 
+    fun exportPortableBackup(): String = JSONObject(exportJson())
+        .put("tgwsBackupVersion", 1)
+        .put("successfulStrategies", JSONArray(successfulStrategies()))
+        .toString()
+
     fun importJson(json: String) {
         require(json.length <= MAX_CHARS) { "ByeByeDPI document exceeds the size limit" }
+        var successful: JSONArray? = null
         val validated = try {
             val source = JSONObject(json)
             require(source.get("app") == UPSTREAM_APP)
+            if (source.has("tgwsBackupVersion")) {
+                require(source.get("tgwsBackupVersion") == 1) { "Unsupported backup version" }
+                successful = source.getJSONArray("successfulStrategies").also { require(it.isStringArray()) }
+            } else {
+                require(!source.has("successfulStrategies")) { "Missing backup format version" }
+            }
             val version = source.get("version") as? String ?: error("Missing backup version")
             require(version.isNotBlank())
             document().put("version", version).apply {
@@ -65,7 +77,9 @@ internal class DpiSettingsStore(context: Context) {
             throw IllegalArgumentException("Invalid ByeByeDPI document", exception)
         }
         connectionOptions(validated)
-        check(preferences.edit().putString("backup", validated.toString()).commit()) { "Could not save ByeByeDPI document" }
+        val edit = preferences.edit().putString("backup", validated.toString())
+        successful?.let { edit.putString(SUCCESSFUL_STRATEGIES, it.toString()) }
+        check(edit.commit()) { "Could not save ByeByeDPI document" }
     }
 
     fun connectionOptions(): DpiConnectionOptions = connectionOptions(JSONObject(exportJson()))
