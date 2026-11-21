@@ -53,21 +53,38 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.amurcanov.tgwsproxy.R
 
-/** Top of every screen: the mark on the left, where we are on the right, as in the brand's templates. */
+@Composable
+fun ProductByline(modifier: Modifier = Modifier) {
+    val cursorColor = Brand.accent
+    val byline = stringResource(R.string.app_byline)
+    val cursor = stringResource(R.string.product_cursor)
+    Text(
+        text = androidx.compose.ui.text.buildAnnotatedString {
+            append(byline)
+            pushStyle(androidx.compose.ui.text.SpanStyle(color = cursorColor))
+            append(cursor)
+            pop()
+        },
+        modifier = modifier,
+        style = MonoLabelStyle,
+        color = Brand.muted
+    )
+}
+
+/** Product identity and the current section, shared by each screen. */
 @Composable
 fun BrandHeader(section: String, modifier: Modifier = Modifier) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.app_name), color = Brand.ink, style = MaterialTheme.typography.titleMedium)
-            MonoLabel(stringResource(R.string.app_byline))
+            Text(stringResource(R.string.app_name), color = Brand.ink, style = MaterialTheme.typography.titleLarge)
+            ProductByline()
         }
-        MonoLabel("TECH / ${section.uppercase()}", Modifier.weight(0.65f))
+        Text(section.uppercase(), modifier = Modifier.weight(0.5f), style = MonoLabelStyle,
+            color = Brand.muted, textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
 

@@ -223,6 +223,10 @@ fun InfoTab(settingsStore: SettingsStore) {
 
         Spacer(Modifier.height(16.dp))
         MonoLabel(stringResource(R.string.unofficial_notice))
+        Spacer(Modifier.height(16.dp))
+        MonoLabel(stringResource(R.string.footer_version, BuildConfig.VERSION_NAME))
+        MonoLabel(stringResource(R.string.footer_licenses))
+        ProductByline()
     }
 
     pendingManualRelease?.let { release ->
