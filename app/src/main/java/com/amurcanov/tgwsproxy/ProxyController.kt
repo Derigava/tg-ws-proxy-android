@@ -7,6 +7,8 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.first
 
 object ProxyController {
+    private val commandLock = Any()
+    private var stopGeneration = 0L
 
     /** Same as Flowseal's desktop default (`ProxyConfig.dc_redirects`). */
     const val AUTO_DC_IPS =
@@ -16,6 +18,7 @@ object ProxyController {
         context: Context,
         showInvalidPortToast: Boolean = false
     ): Boolean {
+        val generation = synchronized(commandLock) { stopGeneration }
         val settingsStore = SettingsStore(context)
         settingsStore.migrateLegacyDefaults()
         val portText = settingsStore.port.first()
@@ -60,35 +63,41 @@ object ProxyController {
             }
         }.joinToString(",")
 
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, ProxyService::class.java).apply {
-                action = ProxyService.ACTION_START
-                putExtra(ProxyService.EXTRA_BIND_IP, bindIp)
-                putExtra(ProxyService.EXTRA_PORT, port)
-                putExtra(ProxyService.EXTRA_IPS, parsedIps)
-                putExtra(ProxyService.EXTRA_POOL_SIZE, poolSize)
-                putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, cfEnabled)
-                putExtra(ProxyService.EXTRA_CF_DISABLE_TLS, cfDisableTls)
-                putExtra(ProxyService.EXTRA_CFPROXY_PRIORITY, true)
-                putExtra(
-                    ProxyService.EXTRA_CFPROXY_DOMAIN,
-                    if (customCfDomainEnabled && cfEnabled) customCfDomain else ""
-                )
-                putExtra(ProxyService.EXTRA_CF_WORKER_DOMAIN, cfWorkerDomain)
-                putExtra(ProxyService.EXTRA_SECRET_KEY, secretKey)
-            }
-        )
+        synchronized(commandLock) {
+            if (generation != stopGeneration) return false
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, ProxyService::class.java).apply {
+                    action = ProxyService.ACTION_START
+                    putExtra(ProxyService.EXTRA_BIND_IP, bindIp)
+                    putExtra(ProxyService.EXTRA_PORT, port)
+                    putExtra(ProxyService.EXTRA_IPS, parsedIps)
+                    putExtra(ProxyService.EXTRA_POOL_SIZE, poolSize)
+                    putExtra(ProxyService.EXTRA_CFPROXY_ENABLED, cfEnabled)
+                    putExtra(ProxyService.EXTRA_CF_DISABLE_TLS, cfDisableTls)
+                    putExtra(ProxyService.EXTRA_CFPROXY_PRIORITY, true)
+                    putExtra(
+                        ProxyService.EXTRA_CFPROXY_DOMAIN,
+                        if (customCfDomainEnabled && cfEnabled) customCfDomain else ""
+                    )
+                    putExtra(ProxyService.EXTRA_CF_WORKER_DOMAIN, cfWorkerDomain)
+                    putExtra(ProxyService.EXTRA_SECRET_KEY, secretKey)
+                }
+            )
+        }
         ProxyTileService.requestSync(context)
         return true
     }
 
     fun stop(context: Context) {
-        context.startService(
-            Intent(context, ProxyService::class.java).apply {
-                action = ProxyService.ACTION_STOP
-            }
-        )
+        synchronized(commandLock) {
+            stopGeneration++
+            context.startService(
+                Intent(context, ProxyService::class.java).apply {
+                    action = ProxyService.ACTION_STOP
+                }
+            )
+        }
         ProxyTileService.requestSync(context)
     }
 
