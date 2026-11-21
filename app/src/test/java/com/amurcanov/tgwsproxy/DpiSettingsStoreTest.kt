@@ -43,6 +43,21 @@ class DpiSettingsStoreTest {
         assertEquals(emptyList<String>(), DpiSettingsStore(context).successfulStrategies())
     }
 
+    @Test fun portableBackupRestoresSuccessfulStrategiesAndRejectsMalformedResultsAtomically() {
+        store.resetSettings()
+        store.importJson(fixture)
+        store.saveSuccessfulStrategy(DpiStrategyResult(DpiStrategyCandidate("-d1", listOf("-d1")), DpiProbeTarget.entries.toSet()))
+        val backup = store.exportPortableBackup()
+        store.resetSettings()
+        store.importJson(backup)
+        assertEquals(listOf("-d1"), store.successfulStrategies())
+        assertEquals("1080", store.currentSettings()["byedpi_proxy_port"])
+        val before = store.exportPortableBackup()
+        val invalid = JSONObject(backup).put("successfulStrategies", org.json.JSONArray().put(false)).toString()
+        assertThrows(IllegalArgumentException::class.java) { store.importJson(invalid) }
+        assertEquals(before, store.exportPortableBackup())
+    }
+
     @Test fun pinnedFormatRoundTripsAllSectionsWithoutTgKeys() {
         store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"secret_key\":\"not-for-export\""))
         val output = JSONObject(store.exportJson())
