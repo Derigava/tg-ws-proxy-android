@@ -18,6 +18,17 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class DpiSessionReconciliationTest {
+    @Test fun freshModeIsVpnAndExplicitSocksFallbackIsNotRewritten() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val holder = DpiSessionHolder(dispatcher = Dispatchers.Unconfined, inspect = { _, _ -> null })
+        assertEquals(DpiMode.VPN, holder.mode.value)
+        holder.awaitRestoration(context)
+        assertEquals(DpiMode.VPN, holder.mode.value)
+        assertTrue(holder.switchMode(context, DpiMode.SOCKS5))
+        holder.awaitRestoration(context)
+        assertEquals(DpiMode.SOCKS5, holder.mode.value)
+    }
+
     @Test fun hangingStatusHasBoundedFailure() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val holder = DpiSessionHolder(
