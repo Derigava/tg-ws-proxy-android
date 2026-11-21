@@ -65,6 +65,7 @@ class DpiProxyService : Service() {
     private var endpoint: String? = null
     private val proxy by lazy { ByeDpiProxy() }
     private var engineThread: Thread? = null
+    private val startup = SocksStartupState()
 
     @Volatile
     private var engineError: String? = null
@@ -148,14 +149,15 @@ class DpiProxyService : Service() {
         engineThread = thread(name = "ByeDPI") {
             try {
                 val code = proxy.startProxy(args)
-                if (code != 0) engineError = "engine exited with code $code"
+                engineError = "engine exited with code $code"
             } catch (e: Throwable) {
                 Log.e(TAG, "ByeDPI engine failed", e)
                 engineError = "engine exception: ${e.message ?: e.javaClass.simpleName}"
             }
             // Engine stopped on its own after being reported ready: end the
             // process so the caller's binder-death callback fires.
-            if (!stopping && ready) terminate()
+            startup.exited(0)
+            if (!stopping) terminate()
         }
 
         thread(name = "ByeDPIMonitor") {
@@ -170,8 +172,10 @@ class DpiProxyService : Service() {
                 // Positive ownership: OUR engine called listen() (native signal)
                 // and answers the SOCKS5 handshake.
                 if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
-                    ready = true
-                    receiver?.send(RESULT_STARTED, Bundle())
+                    startup.publishReady {
+                        ready = true
+                        receiver?.send(RESULT_STARTED, Bundle())
+                    }
                     return@thread
                 }
                 Thread.sleep(POLL_MS)
@@ -183,8 +187,9 @@ class DpiProxyService : Service() {
     }
 
     private fun stop() {
-        endpoint = null
         stopping = true
+        startup.stop()
+        endpoint = null
         runCatching { proxy.stopProxy() }
         engineThread?.join(2_000)
         engineThread = null
