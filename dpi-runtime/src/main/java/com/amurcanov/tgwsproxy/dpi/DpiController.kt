@@ -92,6 +92,7 @@ class DpiController internal constructor(
                     // (Stopping) or an exit that already failed the state must
                     // win; a death recorded during startup must never yield Running.
                     if (_state.value is DpiState.Starting) {
+                        stopUnconfirmed = result is DpiEngineResult.Failed
                         _state.value = when (result) {
                             is DpiEngineResult.Running ->
                                 if (deathDuringStart) DpiState.Failed("engine exited during startup")
