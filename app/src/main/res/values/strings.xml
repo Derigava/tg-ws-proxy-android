@@ -238,6 +238,9 @@
     <string name="dpi_strategy_test_empty">None of the strategies reached a test host.</string>
     <string name="dpi_strategy_test_cancelled">Testing stopped.</string>
     <string name="dpi_strategy_test_failed">The operation could not be completed.</string>
+    <string name="dpi_strategy_test_saved">Successful strategies</string>
+    <string name="dpi_strategy_test_timeout">The test timed out.</string>
+    <string name="dpi_strategy_test_close">Close</string>
     <string name="dpi_strategy_test_start_failures">Failed to start: %1$d</string>
     <string name="dpi_strategy_test_unreachable">Unreachable: %1$s</string>
     <string name="dpi_strategy_test_score">HTTPS hosts reached: %1$d / %2$d</string>

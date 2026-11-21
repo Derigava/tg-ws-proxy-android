@@ -157,7 +157,7 @@ fun ConnectionTab(
     var pendingConsentSlot by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingConsentNetworks by rememberSaveable { mutableStateOf<LongArray?>(null) }
     var showStrategyPicker by remember { mutableStateOf(false) }
-    var showStrategyTest by remember { mutableStateOf(false) }
+    var showStrategyTest by rememberSaveable { mutableStateOf(false) }
 
     // Strings resolved once in composition (stringResource is @Composable), then
     // read by the non-composable command lambdas below.

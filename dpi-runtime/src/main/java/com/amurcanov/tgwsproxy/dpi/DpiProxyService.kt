@@ -39,6 +39,7 @@ import kotlin.concurrent.thread
 class DpiProxyService : Service() {
     companion object {
         const val ACTION_START = "io.github.derigava.tgwsproxy.dpi.START"
+        internal const val ACTION_BIND_PROBE = "io.github.derigava.tgwsproxy.dpi.BIND_PROBE"
         const val ACTION_STOP = "io.github.derigava.tgwsproxy.dpi.STOP"
         const val EXTRA_ARGS = "EXTRA_ARGS"
         const val EXTRA_HOST = "EXTRA_HOST"
@@ -93,11 +94,18 @@ class DpiProxyService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder =
-        if (intent?.action == DpiRemoteSession.ACTION_STATUS) statusBinder else sessionBinder
+        when (intent?.action) {
+            DpiRemoteSession.ACTION_STATUS -> statusBinder
+            ACTION_BIND_PROBE -> {
+                start(intent, foreground = false)
+                sessionBinder
+            }
+            else -> sessionBinder
+        }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> start(intent)
+            ACTION_START -> start(intent, foreground = true)
             ACTION_STOP -> stop()
             else -> stopSelfResult(startId)
         }
@@ -105,7 +113,7 @@ class DpiProxyService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun start(intent: Intent) {
+    private fun start(intent: Intent, foreground: Boolean) {
         if (engineThread != null) return
         val args = intent.getStringArrayListExtra(EXTRA_ARGS)?.toTypedArray()
         val host = intent.getStringExtra(EXTRA_HOST)
@@ -135,7 +143,7 @@ class DpiProxyService : Service() {
         // Publish the session identity immediately so the caller can establish
         // death monitoring before the engine is ready.
         receiver?.send(RESULT_SESSION, Bundle().apply { putBinder(EXTRA_BINDER, sessionBinder) })
-        startForeground(notification(getString(R.string.dpi_notification_running)))
+        if (foreground) startForeground(notification(getString(R.string.dpi_notification_running)))
 
         engineThread = thread(name = "ByeDPI") {
             try {
