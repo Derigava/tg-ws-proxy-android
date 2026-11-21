@@ -1,4 +1,4 @@
-"""Reject APKs with 16 KB-incompatible natives or package-installer code."""
+"""Check native alignment and scan DEX for specific installer signatures."""
 from __future__ import annotations
 
 import argparse
@@ -7,10 +7,8 @@ from pathlib import Path
 import struct
 import zipfile
 
-# Play Protect classifies sideloaded apps that can download or install other
-# packages as potentially harmful. The release no longer contains any of these
-# capabilities; fail the build if one returns through code, a dependency or a
-# resource merge.
+# Heuristic signatures in DEX bytes only. Passing does not establish that the
+# APK lacks installation capabilities in other code, assets, or native libraries.
 FORBIDDEN_DEX_TOKENS = {
     b"REQUEST_INSTALL_PACKAGES": "install-packages permission",
     b"REQUEST_IGNORE_BATTERY_OPTIMIZATIONS": "battery-exemption permission",
@@ -103,7 +101,7 @@ def check_dpi_libraries(apk: Path, abi: str) -> int:
 
 
 def check_no_package_installer(apk: Path) -> int:
-    """Reject DEX code that can install APKs or request dangerous exemptions."""
+    """Scan DEX bytes for listed signatures, not native code or other assets."""
     with zipfile.ZipFile(apk) as archive:
         dex_files = [item for item in archive.infolist() if item.filename.endswith(".dex")]
         if not dex_files:
@@ -125,4 +123,4 @@ if __name__ == "__main__":
     native = check(options.apk, options.abi)
     dex = check_no_package_installer(options.apk)
     print(f"16 KB compatibility: {native} native libraries passed")
-    print(f"Package installer check: {dex} DEX file(s) passed")
+    print(f"DEX signature scan: {dex} DEX file(s) passed; other code/assets not scanned for installer capabilities")
