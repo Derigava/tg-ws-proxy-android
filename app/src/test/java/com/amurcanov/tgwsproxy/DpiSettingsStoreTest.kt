@@ -58,6 +58,19 @@ class DpiSettingsStoreTest {
         assertEquals(before, store.exportPortableBackup())
     }
 
+    @Test fun diagnosticsSnapshotUsesOneDocumentAndOmitsArguments() {
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_enable_cmd_settings":true,"byedpi_cmd_args":"-H{list:private} --port 2345"},"domainLists":[{"id":"1","name":"private","domains":["secret.example"]}]}""")
+        val first = store.diagnosticsSnapshot()
+        assertTrue(first.commandMode)
+        assertEquals(2345, first.port)
+        assertFalse(first.toString().contains("secret.example"))
+        assertFalse(first.toString().contains("-H"))
+        store.importJson("""{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_enable_cmd_settings":false,"byedpi_proxy_port":"3456"}}""")
+        val second = store.diagnosticsSnapshot()
+        assertFalse(second.commandMode)
+        assertEquals(3456, second.port)
+    }
+
     @Test fun pinnedFormatRoundTripsAllSectionsWithoutTgKeys() {
         store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"secret_key\":\"not-for-export\""))
         val output = JSONObject(store.exportJson())
