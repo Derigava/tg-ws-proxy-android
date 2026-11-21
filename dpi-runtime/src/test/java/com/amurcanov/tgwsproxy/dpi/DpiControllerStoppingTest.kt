@@ -18,6 +18,34 @@ import java.util.concurrent.TimeUnit
 class DpiControllerStoppingTest {
 
     @Test
+    fun failedStartRequiresConfirmedStopBeforeRetry() {
+        val tasks = mutableListOf<Runnable>()
+        val dispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) { tasks.add(block) }
+        }
+        var starts = 0
+        val engine = object : DpiEngine {
+            override var onExit: (() -> Unit)? = null
+            override fun start(config: DpiConfig): DpiEngineResult {
+                starts++
+                return DpiEngineResult.Failed("stop could not be confirmed")
+            }
+            override fun stop() = Unit
+        }
+        val controller = DpiController(engine, dispatcher)
+        val config = DpiConfig(DpiMode.SOCKS5)
+        controller.start(config); tasks.removeAt(0).run()
+        val failed = controller.state.value
+        controller.start(config)
+        assertEquals(failed, controller.state.value)
+        assertEquals(1, starts)
+        controller.stop(); tasks.removeAt(0).run()
+        assertEquals(DpiState.Off, controller.state.value)
+        controller.start(config); tasks.removeAt(0).run()
+        assertEquals(2, starts)
+    }
+
+    @Test
     fun failedStopBlocksRestartUntilStopIsConfirmed() {
         val tasks = mutableListOf<Runnable>()
         val dispatcher = object : CoroutineDispatcher() {
