@@ -264,6 +264,23 @@ class ReleaseVersionTests(unittest.TestCase):
     def test_next_patch_follows_the_highest_tag_on_the_line(self):
         self.assertEqual(release.next_version("1.1", ["v1.1.0", "v1.1.10", "v1.1.2", "v1.10.5"]), "1.1.11")
 
+    def test_version_code_is_derived_from_the_name(self):
+        self.assertEqual(release.version_code("1.2.0"), 10200)
+        self.assertEqual(release.version_code("1.2.1"), 10201)
+        self.assertEqual(release.version_code("1.3.0"), 10300)
+        self.assertEqual(release.version_code("v2.0.0"), 20000)
+
+    def test_version_code_stays_above_the_published_builds(self):
+        # Published builds used 1000 + CI run number; the 1.1.4 release was 1069.
+        self.assertGreater(release.version_code("1.2.0"), 1069)
+        self.assertGreater(release.version_code("1.2.1"), release.version_code("1.2.0"))
+
+    def test_version_code_rejects_a_bad_name(self):
+        with self.assertRaises(ValueError):
+            release.version_code("1.2")
+        with self.assertRaises(ValueError):
+            release.version_code("1.100.0")
+
     def test_version_file_must_be_major_minor(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "VERSION"

@@ -85,12 +85,14 @@ jobs:
           PRIVATE: ${{ github.event.repository.private }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "version_code=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_OUTPUT"
           # VERSION holds MAJOR.MINOR; the next free patch on that line names the build.
-          # The updater compares versionCode, so the name can follow the changelog.
           line="$(tr -d '[:space:]' < VERSION)"
           tags="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$line." --jq '.[].ref | sub("refs/tags/"; "")')"
-          echo "version_name=$(printf '%s\n' "$tags" | python scripts/release_version.py version --line "$line")" >> "$GITHUB_OUTPUT"
+          name="$(printf '%s\n' "$tags" | python scripts/release_version.py version --line "$line")"
+          # The updater compares versionCode, so it is derived from the name:
+          # major*10000 + minor*100 + patch keeps every build above the published ones.
+          echo "version_name=$name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$(python scripts/release_version.py code "$name")" >> "$GITHUB_OUTPUT"
           if [[ "$PRIVATE" == "true" ]]; then
             echo 'updates_enabled=false' >> "$GITHUB_OUTPUT"
           else
@@ -438,5 +440,5 @@ jobs:
           python scripts/release_version.py notes --version "$APP_VERSION_NAME" \
             --version-code "$APP_VERSION_CODE" --core-version "$CORE_VERSION" > "$RUNNER_TEMP/release-notes.md"
           gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
-            --target "$(git rev-parse HEAD)" --title "TG WS Proxy Android $APP_VERSION_NAME" \
+            --target "$(git rev-parse HEAD)" --title "ByeBye TGWS Proxy Android $APP_VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"

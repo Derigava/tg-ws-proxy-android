@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">TG-WS Proxy</string>
+    <string name="app_name">ByeBye TGWS Proxy</string>
     <string name="status_connecting">&gt; ПОДКЛЮЧЕНИЕ</string>
     <string name="status_connected">[OK] ПОДКЛЮЧЕНО</string>
     <string name="status_disconnected">● ОТКЛЮЧЕНО</string>
@@ -70,11 +70,13 @@
     <string name="android_author_subtitle">amurcanov/tg-ws-proxy-android</string>
     <string name="android_fork_repo">Репозиторий</string>
     <string name="android_fork_repo_subtitle">Исходники и релизы этого приложения</string>
+    <string name="dpi_upstream">Основа DPI</string>
+    <string name="dpi_upstream_subtitle">romanvht/ByeByeDPI</string>
     <string name="original_tg_ws_proxy">Ядро tg-ws-proxy</string>
     <string name="original_tg_ws_proxy_subtitle">Исходная идея и код от Flowseal</string>
     <string name="useful_material">Полезный материал</string>
     <string name="useful_material_subtitle">Заметки о работе прокси от IMDelewer</string>
-    <string name="unofficial_notice">// НЕОФИЦИАЛЬНОЕ ПРИЛОЖЕНИЕ, НЕ СВЯЗАНО С TELEGRAM</string>
+    <string name="unofficial_notice">Неофициальное приложение, не связано с Telegram.</string>
     <string name="update_postponed_24h">Обновление отложено на 24 часа</string>
     <string name="help_auto_dc_title">Авто и адреса датацентров</string>
     <string name="help_auto_dc_text">С включённым Cloudflare адреса DC задаются автоматически, как на ПК: сначала прямой WebSocket к DC2 и DC4, а если он недоступен — CF-маршрут. Если Cloudflare выключен, соединение идёт только напрямую на DC Telegram, и адреса можно задать вручную. Обычно хватает DC2 и DC4, остальные нужны для ручной настройки и диагностики.</string>
