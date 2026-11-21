@@ -28,6 +28,24 @@ data class DpiConfig(
         }
 
     /** Full native argv, mirroring the upstream `ciadpi` invocation. */
-    fun toArgv(): Array<String> =
-        (listOf("ciadpi", "--ip", normalizedHost, "--port", port.toString()) + args).toTypedArray()
+    fun toArgv(): Array<String> {
+        require(isLoopback) { "SOCKS5 bind host must be loopback" }
+        require(port in 1..65535) { "Invalid SOCKS5 port" }
+        val takesValue = "iwpIbcxALuTByKHVRsdoqfntlOQeMrm agWPjC#/".replace(" ", "")
+        for (arg in args) {
+            require(arg != "--") { "Argument terminator is not allowed" }
+            if (arg.startsWith("--")) {
+                val name = arg.substring(2).substringBefore('=')
+                require(name.isNotEmpty() && !"ip".startsWith(name) && !"port".startsWith(name)) {
+                    "Endpoint arguments are not allowed"
+                }
+            } else if (arg.startsWith('-') && arg.length > 1) {
+                for (option in arg.substring(1)) {
+                    require(option != 'i' && option != 'p') { "Endpoint arguments are not allowed" }
+                    if (option in takesValue) break
+                }
+            }
+        }
+        return (listOf("ciadpi", "--ip", normalizedHost.removeSurrounding("[", "]"), "--port", port.toString()) + args).toTypedArray()
+    }
 }
