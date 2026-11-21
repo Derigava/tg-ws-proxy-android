@@ -144,46 +144,59 @@ class DpiVpnEngine(
      * [ResultReceiver] and death via a posted [IBinder.DeathRecipient]).
      */
     private inner class StartSession(private val myGeneration: Int) {
-        val acknowledged = CompletableDeferred<DpiEngineResult>()
-        val exited = CompletableDeferred<Unit>()
-        private var deathRecorded = false
-        private var ready = false
+        private val state = VpnStartupState { onExit?.invoke() }
+        val acknowledged = state.acknowledged
+        val exited = state.exited
 
         private val deathRecipient = IBinder.DeathRecipient {
             mainHandler.post {
                 exited.complete(Unit)
-                if (myGeneration == generation) onDeath()
+                if (myGeneration == generation) state.onDeath()
             }
         }
 
         fun onSession(binder: IBinder?) {
             if (binder == null) {
-                deathRecorded = true
+                state.onFailure("VPN session identity unavailable")
                 return
             }
             try {
                 binder.linkToDeath(deathRecipient, 0)
             } catch (e: Exception) {
                 exited.complete(Unit)
-                deathRecorded = true
+                state.onDeath()
             }
         }
 
         fun onReady() {
-            ready = true
-            if (deathRecorded) {
-                acknowledged.complete(DpiEngineResult.Failed("VPN exited during startup"))
-            } else {
-                acknowledged.complete(DpiEngineResult.Running)
-            }
+            state.onReady()
         }
 
         fun onFailure(reason: String) {
-            acknowledged.complete(DpiEngineResult.Failed(reason))
+            state.onFailure(reason)
         }
+    }
+}
 
-        fun onDeath() {
-            if (ready) onExit?.invoke() else deathRecorded = true
-        }
+/** Accessed on the main thread, like the result receiver and death recipient. */
+internal class VpnStartupState(private val onExit: () -> Unit) {
+    val acknowledged = CompletableDeferred<DpiEngineResult>()
+    val exited = CompletableDeferred<Unit>()
+    private var running = false
+    private var dead = false
+
+    fun onReady() {
+        if (!dead && acknowledged.complete(DpiEngineResult.Running)) running = true
+    }
+
+    fun onFailure(reason: String) {
+        acknowledged.complete(DpiEngineResult.Failed(reason))
+    }
+
+    fun onDeath() {
+        if (dead) return
+        dead = true
+        exited.complete(Unit)
+        if (running) onExit() else onFailure("VPN exited during startup")
     }
 }
