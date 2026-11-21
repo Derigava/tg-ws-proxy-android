@@ -3,6 +3,8 @@ package com.amurcanov.tgwsproxy.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -54,62 +56,6 @@ class DualModuleControlsTest {
 
     @get:Rule
     val composeRule = createComposeRule()
-
-    private var leftClicks = 0
-    private var rightClicks = 0
-
-    private fun statusText(state: CursorVisualState, onText: String = "[OK] CONNECTED") = when (state) {
-        CursorVisualState.On -> onText
-        CursorVisualState.Connecting -> "> CONNECTING"
-        CursorVisualState.Off -> "● OFFLINE"
-    }
-
-    private fun setControls(
-        leftState: CursorVisualState = CursorVisualState.Off,
-        rightState: CursorVisualState = CursorVisualState.Off,
-    ) {
-        leftClicks = 0
-        rightClicks = 0
-        composeRule.setContent {
-            // Robolectric starts in touch mode. Model a TV's non-touch input
-            // while exercising the real Compose focus traversal and key activation.
-            val keyboardMode = object : InputModeManager {
-                override val inputMode = InputMode.Keyboard
-                override fun requestInputMode(inputMode: InputMode) = inputMode == InputMode.Keyboard
-            }
-            CompositionLocalProvider(LocalInputModeManager provides keyboardMode) {
-                TgWsProxyTheme {
-                    DualModuleControls(
-                        tg = ModuleControls(
-                            moduleLabel = "TG-WS",
-                            visualState = leftState,
-                            actionDescription = "Start TG-WS proxy",
-                            statusText = statusText(leftState),
-                            addressText = "127.0.0.1:1443",
-                            onToggle = { leftClicks++ },
-                        ),
-                        dpi = ModuleControls(
-                            moduleLabel = "ByeByeDPI",
-                            visualState = rightState,
-                            actionDescription = "Start ByeByeDPI VPN",
-                            statusText = statusText(rightState),
-                            addressText = "VPN",
-                            onToggle = { rightClicks++ },
-                        ),
-                        applyInTelegramEnabled = true,
-                        onApplyInTelegram = {},
-                    )
-                }
-            }
-        }
-    }
-
-    private fun assertButton(name: String, stateDescription: String) {
-        val node = composeRule.onNodeWithContentDescription(name).assertHasClickAction()
-        val config = node.fetchSemanticsNode().config
-        assertEquals("button role", Role.Button, config[SemanticsProperties.Role])
-        assertEquals("state description", stateDescription, config[SemanticsProperties.StateDescription])
-    }
 
     @Test
     fun strategyEditorReadsStringTypedNumbersFromImport() {
@@ -193,76 +139,27 @@ class DualModuleControlsTest {
     }
 
     @Test
-    fun twoIndependentButtonsExposeRoleNameAndState() {
-        setControls()
-        assertButton("Start TG-WS proxy", "● OFFLINE")
-        assertButton("Start ByeByeDPI VPN", "● OFFLINE")
-    }
-
-    @Test
-    fun togglingRightDoesNotInvokeLeft() {
-        setControls()
-        composeRule.onNodeWithContentDescription("Start ByeByeDPI VPN").performClick()
-        composeRule.waitForIdle()
-        assertEquals("left (TG-WS) command must not fire", 0, leftClicks)
-        assertEquals("right (ByeByeDPI) command must fire once", 1, rightClicks)
-    }
-
-    @Test
-    fun startingRightShowsConnectingNotRunning() {
-        setControls(rightState = CursorVisualState.Connecting)
-        val state = composeRule.onNodeWithContentDescription("Start ByeByeDPI VPN")
-            .fetchSemanticsNode().config[SemanticsProperties.StateDescription]
-        assertEquals("> CONNECTING", state)
-        assertTrue("Starting must not advertise running", state != "RUNNING" && state != "[OK] CONNECTED")
-    }
-
-    @Test
-    fun narrowWidthAndLargeFontKeepLabelsAndActionsAccessible() {
+    fun homeHasOnePowerControlAndThreeAccessibleSelections() {
+        var changes = com.amurcanov.tgwsproxy.ServiceSelection()
+        var powers = 0
         composeRule.setContent {
-            CompositionLocalProvider(LocalDensity provides Density(1f, 2f)) {
-                TgWsProxyTheme {
-                    Box(Modifier.width(320.dp)) {
-                        DualModuleControls(
-                            tg = ModuleControls(
-                                moduleLabel = "TG-WS",
-                                visualState = CursorVisualState.Off,
-                                actionDescription = "Start TG-WS proxy",
-                                statusText = "● OFFLINE",
-                                addressText = "127.0.0.1:1443",
-                                onToggle = { leftClicks++ },
-                            ),
-                            dpi = ModuleControls(
-                                moduleLabel = "ByeByeDPI",
-                                visualState = CursorVisualState.Off,
-                                actionDescription = "Start ByeByeDPI VPN",
-                                statusText = "● OFFLINE",
-                                addressText = "VPN",
-                                onToggle = { rightClicks++ },
-                            ),
-                            applyInTelegramEnabled = true,
-                            onApplyInTelegram = {},
-                        )
-                    }
-                }
+            var selection by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.amurcanov.tgwsproxy.ServiceSelection()) }
+            TgWsProxyTheme {
+                DualModuleControls(selection, { selection = it; changes = it }, CursorVisualState.Off, "Offline", "Start selected services", { powers++ }, false, false, false, {})
             }
         }
-        composeRule.onNodeWithContentDescription("Start TG-WS proxy").assertHasClickAction()
-        composeRule.onNodeWithContentDescription("Start ByeByeDPI VPN").assertHasClickAction()
-        composeRule.onNodeWithText("TG-WS").assertExists()
-        composeRule.onNodeWithText("ByeByeDPI").assertExists()
-    }
-
-    @Test
-    fun tvDpadMovesFocusAndActivates() {
-        setControls()
-        val left = composeRule.onNodeWithContentDescription("Start TG-WS proxy")
-        val right = composeRule.onNodeWithContentDescription("Start ByeByeDPI VPN")
-        left.performSemanticsAction(SemanticsActions.RequestFocus).assertIsFocused()
-        left.performKeyInput { pressKey(Key.DirectionRight) }
-        right.assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
-        composeRule.waitForIdle()
-        assertEquals("D-pad select must not fire the left command", 0, leftClicks)
-        assertEquals("D-pad select must fire the right command", 1, rightClicks)
+        val telegram = composeRule.onNodeWithText("Telegram").assertHasClickAction()
+        assertEquals(Role.Checkbox, telegram.fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals(Role.Checkbox, composeRule.onNodeWithText("YouTube").fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals(Role.Checkbox, composeRule.onNodeWithText("Discord").fetchSemanticsNode().config[SemanticsProperties.Role])
+        val power = composeRule.onNodeWithContentDescription("Start selected services")
+        assertEquals(Role.Button, power.fetchSemanticsNode().config[SemanticsProperties.Role])
+        assertEquals("Offline", power.fetchSemanticsNode().config[SemanticsProperties.StateDescription])
+        composeRule.onNodeWithText("YouTube").performClick()
+        assertTrue(changes.telegram && changes.youtube && !changes.discord)
+        composeRule.onNodeWithText("Discord").performClick()
+        assertTrue(changes.discord)
+        composeRule.onNodeWithContentDescription("Start selected services").performClick()
+        assertEquals(1, powers)
     }
 }
