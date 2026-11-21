@@ -3,6 +3,7 @@ package com.amurcanov.tgwsproxy
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +11,12 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiState
+
+internal fun consumeDpiShortcutStart(intent: Intent): String? {
+    val token = intent.getStringExtra(DpiShortcutActivity.EXTRA_INTERACTIVE_START)
+    intent.removeExtra(DpiShortcutActivity.EXTRA_INTERACTIVE_START)
+    return token?.takeIf { DpiSession.isInteractiveStartCurrent(it) }
+}
 
 /**
  * External automation for the ByeByeDPI module requires visible confirmation,
@@ -66,10 +73,17 @@ open class DpiShortcutActivity : ComponentActivity() {
         val state = DpiSession.state.value
         val active = state is DpiState.Running || state is DpiState.Starting
         when (action) {
-            ACTION_START -> if (!active) DpiSession.start(this)
-            ACTION_TOGGLE -> if (active) DpiSession.stop(this) else DpiSession.start(this)
+            ACTION_START -> if (!active) requestStart()
+            ACTION_TOGGLE -> if (active) DpiSession.stop(this) else requestStart()
         }
         finishQuietly()
+    }
+
+    private fun requestStart() {
+        if (DpiSession.mode.value == DpiMode.VPN) {
+            val token = DpiSession.beginInteractiveStart()
+            startActivity(Intent(this, MainActivity::class.java).putExtra(EXTRA_INTERACTIVE_START, token))
+        } else DpiSession.start(this)
     }
 
     private fun finishQuietly() {
@@ -83,6 +97,7 @@ open class DpiShortcutActivity : ComponentActivity() {
     }
 
     companion object {
+        internal const val EXTRA_INTERACTIVE_START = "com.amurcanov.tgwsproxy.dpi.INTERACTIVE_START"
         const val ACTION_START = "io.github.derigava.tgwsproxy.action.dpi.START"
         const val ACTION_STOP = "io.github.derigava.tgwsproxy.action.dpi.STOP"
         const val ACTION_TOGGLE = "io.github.derigava.tgwsproxy.action.dpi.TOGGLE"

@@ -36,6 +36,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.amurcanov.tgwsproxy.BuildConfig
 import com.amurcanov.tgwsproxy.DpiSession
+import com.amurcanov.tgwsproxy.consumeDpiShortcutStart
 import com.amurcanov.tgwsproxy.ProxyController
 import com.amurcanov.tgwsproxy.ProxyService
 import com.amurcanov.tgwsproxy.R
@@ -236,6 +237,12 @@ fun ConnectionTab(
                 showDpiError(msgConsentDenied)
             }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        val activity = context as? android.app.Activity
+        val attempt = activity?.intent?.let(::consumeDpiShortcutStart)
+        if (attempt != null) startVpn(null, true, attempt)
     }
 
     Column(
