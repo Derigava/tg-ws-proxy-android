@@ -44,29 +44,12 @@ def main():
         result = subprocess.run(["adb", "shell", "am", "instrument", "-w", "-r", "-e", "expectedPageSize",
             args.expected_page_size, "io.github.derigava.tgwsproxy.test/androidx.test.runner.AndroidJUnitRunner"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", timeout=240)
-        args.report.write_text(result.stdout, encoding="utf-8")
-        print(result.stdout)
         result.check_returncode()
         count = validate_result(result.stdout)
-    except Exception as failure:
-        if isinstance(failure, subprocess.TimeoutExpired) and failure.output:
-            partial = failure.output.decode("utf-8", errors="replace") if isinstance(failure.output, bytes) else failure.output
-            args.report.write_text(partial, encoding="utf-8")
-        diagnostics = {
-            "logcat": ["adb", "logcat", "-d", "-b", "all", "-v", "threadtime"],
-            "crash": ["adb", "logcat", "-d", "-b", "crash", "-v", "threadtime"],
-            "exit-info": ["adb", "shell", "dumpsys", "activity", "exit-info", "io.github.derigava.tgwsproxy"],
-        }
-        for name, command in diagnostics.items():
-            try:
-                diagnostic = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, encoding="utf-8", errors="replace", timeout=30)
-                args.report.with_suffix("." + name + ".txt").write_text(diagnostic.stdout, encoding="utf-8")
-                if name != "logcat":
-                    print(f"Android {name}:\n" + diagnostic.stdout[-20000:])
-            except Exception as error:
-                print(f"Could not collect {name}: {error}")
-        raise
+        args.report.write_text(f"Instrumentation passed: {count} tests\n", encoding="utf-8")
+    except Exception:
+        args.report.write_text("Instrumentation failed; raw output omitted for privacy\n", encoding="utf-8")
+        raise RuntimeError("Android instrumentation gate failed; raw diagnostics omitted") from None
     print(f"Android gate passed: {count} tests; page size {args.expected_page_size}")
 
 
