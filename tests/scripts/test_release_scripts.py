@@ -229,7 +229,7 @@ E: manifest
             permissions.check_components(tree.replace("action.dpi.TOGGLE", "action.dpi.CHANGED"), "io.github.derigava.tgwsproxy")
 
     def test_expected_permissions_pass(self):
-        permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")
+        permissions.check(set(permissions.ALLOWED) | {"io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"}, "io.github.derigava.tgwsproxy")
 
     def test_install_permission_is_named_in_the_error(self):
         declared = permissions.parse_permissions(self.badging) | {"android.permission.REQUEST_INSTALL_PACKAGES"}

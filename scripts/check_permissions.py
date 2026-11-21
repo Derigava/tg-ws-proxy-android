@@ -56,7 +56,14 @@ def parse_package(badging: str) -> str:
 
 
 def parse_permissions(badging: str) -> set[str]:
-    return set(PERMISSION_RE.findall(badging))
+    result = set()
+    for line in badging.splitlines():
+        if line.lstrip().startswith("uses-permission"):
+            match = PERMISSION_RE.fullmatch(line.strip())
+            if not match:
+                raise ValueError("Unrecognized uses-permission output")
+            result.add(match.group(1))
+    return result
 
 
 def check(permissions: set[str], package: str) -> None:
@@ -70,6 +77,9 @@ def check(permissions: set[str], package: str) -> None:
             "Unexpected permission(s): " + ", ".join(unexpected) +
             "; update scripts/check_permissions.py, README.md and docs/PLAY_PROTECT.md intentionally"
         )
+    missing = sorted(allowed - permissions)
+    if missing:
+        raise ValueError("Missing mandatory permission(s): " + ", ".join(missing))
 
 
 def check_components(tree: str, package: str) -> None:
@@ -85,11 +95,18 @@ def check_components(tree: str, package: str) -> None:
             kind = element.group(1)
             attributes, actions = {}, []
             stack.append((indent, kind, attributes, actions))
-            if kind in {"service", "activity", "activity-alias", "receiver"}:
+            if kind in {"service", "activity", "activity-alias", "receiver", "provider"}:
                 components.append((kind, attributes, actions))
+            if kind == "intent-filter":
+                for _, parent, attrs, _ in reversed(stack[:-1]):
+                    if parent in {"service", "activity", "activity-alias", "receiver", "provider"}:
+                        attrs["_intent_filter"] = "true"
+                        break
             continue
         attr = re.match(r'\s*A: (?:http://schemas\.android\.com/apk/res/)?android:(\w+)(?:\(0x[\da-f]+\))?=(?:"([^"]*)"|(\S+))', line)
         if not attr or not stack:
+            if re.match(r'\s*A: (?:http://schemas\.android\.com/apk/res/)?android:(?:name|exported|permission)\b', line):
+                raise ValueError("Unrecognized security-relevant manifest attribute")
             continue
         _, kind, attributes, _ = stack[-1]
         value = attr.group(2) if attr.group(2) is not None else attr.group(3)
@@ -99,6 +116,28 @@ def check_components(tree: str, package: str) -> None:
                 if parent in {"service", "activity", "activity-alias", "receiver"}:
                     actions.append(value)
                     break
+
+    exported_policy = {
+        ("activity", "com.amurcanov.tgwsproxy.MainActivity"): None,
+        ("activity", "com.amurcanov.tgwsproxy.ProxyShortcutActivity"): None,
+        ("activity", "com.amurcanov.tgwsproxy.DpiShortcutActivity"): None,
+        ("activity", "com.amurcanov.tgwsproxy.ProxyTilePreferencesActivity"): "android.permission.BIND_QUICK_SETTINGS_TILE",
+        ("service", "com.amurcanov.tgwsproxy.ProxyTileService"): "android.permission.BIND_QUICK_SETTINGS_TILE",
+        ("receiver", "androidx.profileinstaller.ProfileInstallReceiver"): "android.permission.DUMP",
+    }
+    for kind, attrs, actions in components:
+        name = attrs.get("name")
+        if not name:
+            raise ValueError("Component missing name in manifest output")
+        exported = attrs.get("exported")
+        if exported not in (None, "true", "false"):
+            raise ValueError("Unrecognized exported value")
+        # Before Android 12, an intent filter makes omitted exported true.
+        effective = exported == "true" or (exported is None and attrs.get("_intent_filter") == "true")
+        if effective:
+            key = (kind, name)
+            if key not in exported_policy or attrs.get("permission") != exported_policy[key]:
+                raise ValueError(f"Unexpected exported component or protection: {kind} {name}")
 
     vpn_action = "android.net.VpnService"
     protection = "android.permission.BIND_VPN_SERVICE"
