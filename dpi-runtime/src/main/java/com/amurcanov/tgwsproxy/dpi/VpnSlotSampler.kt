@@ -53,19 +53,28 @@ class AndroidVpnSlotSampler(private val context: Context) : VpnSlotSampler {
                 ?: return VpnSlotState.UNAVAILABLE to emptySet()
             if (networks.isEmpty()) return VpnSlotState.UNAVAILABLE to emptySet() // empty is indeterminate
 
-            val vpnHandles = networks.mapNotNull { network ->
-                val caps = manager.getNetworkCapabilities(network) ?: return@mapNotNull null
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) network.networkHandle else null
-            }
-            if (vpnHandles.isEmpty()) {
-                VpnSlotState.FREE to emptySet()
-            } else {
-                VpnSlotState.UNKNOWN to vpnHandles.toSet()
+            return classifyVpnNetworks(networks.toList()) { network ->
+                manager.getNetworkCapabilities(network)?.let { caps ->
+                    network.networkHandle to caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                }
             }
         } catch (e: Exception) {
             VpnSlotState.UNAVAILABLE to emptySet() // fail-closed on observation failure
         }
     }
+}
+
+internal fun <T> classifyVpnNetworks(
+    networks: List<T>,
+    capabilities: (T) -> Pair<Long, Boolean>?,
+): Pair<VpnSlotState, Set<Long>> {
+    if (networks.isEmpty()) return VpnSlotState.UNAVAILABLE to emptySet()
+    val handles = mutableSetOf<Long>()
+    for (network in networks) {
+        val (handle, vpn) = capabilities(network) ?: return VpnSlotState.UNAVAILABLE to emptySet()
+        if (vpn) handles.add(handle)
+    }
+    return if (handles.isEmpty()) VpnSlotState.FREE to emptySet() else VpnSlotState.UNKNOWN to handles
 }
 
 /** Android can claim the slot during prepare() if this package was pre-consented. */

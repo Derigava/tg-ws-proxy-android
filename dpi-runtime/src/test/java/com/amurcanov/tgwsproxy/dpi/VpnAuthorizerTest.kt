@@ -31,6 +31,16 @@ class VpnAuthorizerTest {
     private fun thirdParty(handles: Set<Long>) = req(VpnSlotState.THIRD_PARTY, true, handles)
 
     @Test
+    fun disappearingNetworkFailsClosedWithoutCallingPrepare() {
+        val observation = classifyVpnNetworks(listOf(1L, 2L)) { id ->
+            if (id == 1L) id to false else null
+        }
+        assertEquals(VpnSlotState.UNAVAILABLE to emptySet<Long>(), observation)
+        val request = VpnStartRequest(observation.first, prepared = false, vpnNetworks = observation.second)
+        assertEquals(request, request.checkConsent(null) { error("prepare must not be called") })
+    }
+
+    @Test
     fun startSurvivesRecheckWhenSlotStable() {
         assertEquals(VpnStartDecision.Start, authorizer(freePrepared(), freePrepared()).authorize(null))
     }
