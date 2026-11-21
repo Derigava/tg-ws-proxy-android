@@ -1,0 +1,122 @@
+name: Propose ByeByeDPI updates
+
+on:
+  schedule:
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: byebyedpi-update
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    outputs:
+      branch: ${{ steps.destination.outputs.branch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Resolve release and prepare source-only patch
+        id: snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          locked=$(jq -er .tag upstream/byebyedpi.lock.json)
+          live=$(gh api "repos/romanvht/ByeByeDPI/commits/$locked" --jq .sha)
+          gh api repos/romanvht/ByeByeDPI/releases/latest > "$RUNNER_TEMP/release.json"
+          branch=$(python scripts/plan_byebyedpi_update.py --release "$RUNNER_TEMP/release.json" --live-lock-sha "$live")
+          if [[ -z "$branch" ]]; then exit 0; fi
+          tag=${branch#bot/byebyedpi-}
+          unset GITHUB_OUTPUT
+          python scripts/sync_byebyedpi.py --ref "$tag"
+          python scripts/sync_byebyedpi.py --check
+          git add -f -A -- upstream/byebyedpi upstream/byebyedpi.lock.json
+          git diff --cached --quiet && exit 0
+          git diff --cached --binary --full-index > "$RUNNER_TEMP/byebyedpi.patch"
+      - name: Select destination
+        id: destination
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! -s "$RUNNER_TEMP/byebyedpi.patch" ]]; then exit 0; fi
+          tag=$(jq -er .tag upstream/byebyedpi.lock.json)
+          branch="bot/byebyedpi-$tag"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.destination.outputs.branch != ''
+        with:
+          name: byebyedpi-source-patch
+          path: ${{ runner.temp }}/byebyedpi.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  propose:
+    needs: prepare
+    if: needs.prepare.outputs.branch != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: byebyedpi-source-patch
+          path: ${{ runner.temp }}/candidate
+      - name: Open a draft and explicitly dispatch unsigned verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.prepare.outputs.branch }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$BRANCH" =~ ^bot/byebyedpi-v\.[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]
+          git -c core.hooksPath=/dev/null apply --cached "$RUNNER_TEMP/candidate/byebyedpi.patch"
+          # Never check out or execute candidate source in the write-enabled job.
+          python - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(['git', 'diff', '--cached', '--no-renames', '--name-only', '-z']).split(b'\0')[:-1]
+          assert b'upstream/byebyedpi.lock.json' in paths
+          assert all(path == b'upstream/byebyedpi.lock.json' or path.startswith(b'upstream/byebyedpi/') for path in paths)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -c core.hooksPath=/dev/null commit -m "build: pin ByeByeDPI ${BRANCH#bot/byebyedpi-}"
+          gh auth setup-git
+          existing=$(gh pr list --state all --head "$BRANCH" --base "$BASE_BRANCH" --json number --jq length)
+          if [[ "$existing" != 0 ]]; then exit 0; fi
+          # Do not overwrite a maintained branch. Recover an interrupted first attempt
+          # only when its pinned snapshot is identical to this run's candidate.
+          if git ls-remote --exit-code --heads origin "refs/heads/$BRANCH" > /dev/null; then
+            git fetch --no-tags origin "refs/heads/$BRANCH"
+            git diff --quiet FETCH_HEAD HEAD -- upstream/byebyedpi upstream/byebyedpi.lock.json
+            git diff --quiet "${GITHUB_SHA}" FETCH_HEAD -- . ':(exclude)upstream/byebyedpi' ':(exclude)upstream/byebyedpi.lock.json'
+          else
+            status=$?
+            [[ $status == 2 ]]
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
+          # GITHUB_TOKEN-created PRs do not reliably emit pull_request. Dispatch the
+          # trusted workflow (the candidate changes vendor source only), on this ref.
+          gh workflow run android-release.yml --ref "$BRANCH" -f publish_release=false
+          cat > "$RUNNER_TEMP/pr-body.txt" <<'EOF'
+          Updates the pinned ByeByeDPI source. This draft never signs or publishes.
+
+          Review the lock (including nested dependency and license changes), the complete
+          vendor diff and the parity matrix. Check whether screens, settings, tools or
+          native listener/readiness hook sites changed before approving the update.
+          EOF
+          gh pr create --draft --head "$BRANCH" --base "$BASE_BRANCH" \
+            --title "Update ByeByeDPI to ${BRANCH#bot/byebyedpi-}" --body-file "$RUNNER_TEMP/pr-body.txt"

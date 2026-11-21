@@ -71,6 +71,18 @@ class IntegrityTests(unittest.TestCase):
 
 
 class ApkTests(unittest.TestCase):
+    def test_both_dpi_libraries_required_for_selected_abi(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "app.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("lib/x86_64/libbyedpi.so", elf())
+                archive.writestr("lib/arm64-v8a/libhev-socks5-tunnel.so", elf())
+            with self.assertRaisesRegex(ValueError, "libhev-socks5-tunnel"):
+                apk_check.check_dpi_libraries(apk, "x86_64")
+            with zipfile.ZipFile(apk, "a") as archive:
+                archive.writestr("lib/x86_64/libhev-socks5-tunnel.so", elf())
+            self.assertEqual(apk_check.check_dpi_libraries(apk, "x86_64"), 2)
+
     def test_old_4k_native_binary_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "16 KB"):
             apk_check.load_alignments(elf(4096))
@@ -177,6 +189,44 @@ class PermissionTests(unittest.TestCase):
             "android.permission.ACCESS_NETWORK_STATE",
             "io.github.derigava.tgwsproxy.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
         })
+
+    def test_vpn_service_requires_protection_and_legacy_actions(self):
+        tree = '''
+E: manifest
+  E: application
+    E: service
+      A: android:name="com.amurcanov.tgwsproxy.dpi.DpiVpnService"
+      A: android:permission="android.permission.BIND_VPN_SERVICE"
+      A: android:exported=false
+      E: intent-filter
+        E: action
+          A: android:name="android.net.VpnService"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.ProxyShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.TOGGLE"
+    E: activity
+      A: android:name="com.amurcanov.tgwsproxy.DpiShortcutActivity"
+      E: intent-filter
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.START"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.STOP"
+        E: action
+          A: android:name="io.github.derigava.tgwsproxy.action.dpi.TOGGLE"
+'''
+        permissions.check_components(tree, "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "BIND_VPN_SERVICE"):
+            permissions.check_components(tree.replace("BIND_VPN_SERVICE", "INTERNET"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "TG actions"):
+            permissions.check_components(tree.replace("action.TOGGLE", "action.CHANGED"), "io.github.derigava.tgwsproxy")
+        with self.assertRaisesRegex(ValueError, "ByeByeDPI actions"):
+            permissions.check_components(tree.replace("action.dpi.TOGGLE", "action.dpi.CHANGED"), "io.github.derigava.tgwsproxy")
 
     def test_expected_permissions_pass(self):
         permissions.check(permissions.parse_permissions(self.badging), "io.github.derigava.tgwsproxy")

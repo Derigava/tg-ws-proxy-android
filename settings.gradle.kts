@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "TgWsProxy"
 include(":app")
+include(":dpi-runtime")

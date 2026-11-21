@@ -93,6 +93,15 @@ def check(apk: Path, abi: str) -> int:
     return count
 
 
+def check_dpi_libraries(apk: Path, abi: str) -> int:
+    expected = {f"lib/{abi}/{name}" for name in ("libbyedpi.so", "libhev-socks5-tunnel.so")}
+    with zipfile.ZipFile(apk) as archive:
+        missing = expected.difference(archive.namelist())
+    if missing:
+        raise ValueError(f"Missing DPI native libraries: {', '.join(sorted(missing))}")
+    return len(expected)
+
+
 def check_no_package_installer(apk: Path) -> int:
     """Reject DEX code that can install APKs or request dangerous exemptions."""
     with zipfile.ZipFile(apk) as archive:
@@ -112,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("apk", type=Path)
     parser.add_argument("--abi", choices=("arm64-v8a", "x86_64"), default="arm64-v8a")
     options = parser.parse_args()
+    check_dpi_libraries(options.apk, options.abi)
     native = check(options.apk, options.abi)
     dex = check_no_package_installer(options.apk)
     print(f"16 KB compatibility: {native} native libraries passed")

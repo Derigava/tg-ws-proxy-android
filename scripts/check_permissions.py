@@ -19,6 +19,7 @@ ALLOWED = frozenset({
     "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+    "android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED",
     "android.permission.INTERNET",
     "android.permission.POST_NOTIFICATIONS",
     "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -71,6 +72,64 @@ def check(permissions: set[str], package: str) -> None:
         )
 
 
+def check_components(tree: str, package: str) -> None:
+    if package != "io.github.derigava.tgwsproxy":
+        raise ValueError(f"Unexpected application ID: {package}")
+    components = []
+    stack = []
+    for line in tree.splitlines():
+        indent = len(line) - len(line.lstrip())
+        if element := re.match(r"\s*E: ([\w-]+)", line):
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            kind = element.group(1)
+            attributes, actions = {}, []
+            stack.append((indent, kind, attributes, actions))
+            if kind in {"service", "activity", "activity-alias", "receiver"}:
+                components.append((kind, attributes, actions))
+            continue
+        attr = re.match(r'\s*A: (?:http://schemas\.android\.com/apk/res/)?android:(\w+)(?:\(0x[\da-f]+\))?=(?:"([^"]*)"|(\S+))', line)
+        if not attr or not stack:
+            continue
+        _, kind, attributes, _ = stack[-1]
+        value = attr.group(2) if attr.group(2) is not None else attr.group(3)
+        attributes[attr.group(1)] = value
+        if kind == "action" and attr.group(1) == "name":
+            for _, parent, _, actions in reversed(stack[:-1]):
+                if parent in {"service", "activity", "activity-alias", "receiver"}:
+                    actions.append(value)
+                    break
+
+    vpn_action = "android.net.VpnService"
+    protection = "android.permission.BIND_VPN_SERVICE"
+    vpn = [(attrs, actions) for kind, attrs, actions in components
+           if kind == "service" and (vpn_action in actions or attrs.get("permission") == protection)]
+    if len(vpn) != 1 or vpn[0][0].get("name") != "com.amurcanov.tgwsproxy.dpi.DpiVpnService":
+        raise ValueError("Expected exactly one ByeByeDPI VPN service")
+    attrs, actions = vpn[0]
+    if attrs.get("permission") != protection or attrs.get("exported") != "false" or vpn_action not in actions:
+        raise ValueError("VPN service must be non-exported and protected by BIND_VPN_SERVICE")
+    legacy = {f"{package}.action.{action}" for action in ("START", "STOP", "TOGGLE")}
+    target = "com.amurcanov.tgwsproxy.ProxyShortcutActivity"
+    for kind, attrs, actions in components:
+        if kind == "activity" and attrs.get("name") == target and legacy <= set(actions):
+            break
+    else:
+        raise ValueError("Legacy TG actions must remain on ProxyShortcutActivity")
+    if any(legacy.intersection(actions) for _, attrs, actions in components if attrs.get("name") != target):
+        raise ValueError("Legacy TG actions must not target any other component")
+
+    dpi_legacy = {f"{package}.action.dpi.{action}" for action in ("START", "STOP", "TOGGLE")}
+    dpi_target = "com.amurcanov.tgwsproxy.DpiShortcutActivity"
+    for kind, attrs, actions in components:
+        if kind == "activity" and attrs.get("name") == dpi_target and dpi_legacy <= set(actions):
+            break
+    else:
+        raise ValueError("ByeByeDPI actions must remain on DpiShortcutActivity")
+    if any(dpi_legacy.intersection(actions) for _, attrs, actions in components if attrs.get("name") != dpi_target):
+        raise ValueError("ByeByeDPI actions must not target any other component")
+
+
 def find_aapt2(explicit: str | None = None) -> str:
     candidates: list[str] = []
     if explicit:
@@ -108,6 +167,13 @@ def main(argv: list[str] | None = None) -> int:
         package = parse_package(result.stdout)
         permissions = parse_permissions(result.stdout)
         check(permissions, package)
+        manifest = subprocess.run(
+            [aapt2, "dump", "xmltree", str(options.apk), "--file", "AndroidManifest.xml"],
+            capture_output=True, text=True, check=False,
+        )
+        if manifest.returncode != 0:
+            raise ValueError(f"aapt2 manifest dump failed: {manifest.stderr.strip()}")
+        check_components(manifest.stdout, package)
     except ValueError as error:
         print(f"Permission check failed: {error}", file=sys.stderr)
         return 1
