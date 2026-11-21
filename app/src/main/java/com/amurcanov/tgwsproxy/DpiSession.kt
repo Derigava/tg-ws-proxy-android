@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal val DpiSession = DpiSessionHolder()
@@ -38,6 +39,16 @@ internal class DpiAttemptGuard {
     fun begin(): String = java.util.UUID.randomUUID().toString().also { current = it }
     fun invalidate() { current = null }
     fun isCurrent(token: String?): Boolean = token != null && token == current
+}
+
+internal fun launchStrategyRestart(
+    scope: CoroutineScope,
+    states: StateFlow<DpiState>,
+    stillCurrent: () -> Boolean,
+    restart: () -> Unit,
+): Job = scope.launch {
+    val terminal = states.first { it is DpiState.Off || it is DpiState.Failed }
+    if (terminal is DpiState.Off && stillCurrent()) restart()
 }
 
 /**
@@ -87,6 +98,19 @@ internal class DpiSessionHolder {
     private var nextLogId = 0L
 
     fun clearLogs() { journal.value = emptyList() }
+
+    fun applyStrategy(context: Context, command: String) {
+        val appContext = context.applicationContext
+        DpiSettingsStore(appContext).applyStrategy(command)
+        val wasRunning = _state.value is DpiState.Running || _state.value is DpiState.Starting
+        if (!wasRunning) return
+        val oldMode = _mode.value
+        stop(appContext)
+        val version = commandVersion
+        launchStrategyRestart(scope, state, { commandVersion == version && _mode.value == oldMode }) {
+            start(appContext)
+        }
+    }
 
     private fun journalState(context: Context, state: DpiState) {
         val label = when (state) {

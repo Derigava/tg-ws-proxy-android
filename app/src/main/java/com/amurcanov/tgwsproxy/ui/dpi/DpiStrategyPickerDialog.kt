@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -18,13 +18,12 @@ import com.amurcanov.tgwsproxy.DpiSession
 import com.amurcanov.tgwsproxy.R
 import com.amurcanov.tgwsproxy.dpi.DpiCommand
 import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
-import com.amurcanov.tgwsproxy.dpi.DpiState
+
 import com.amurcanov.tgwsproxy.ui.Brand
 import com.amurcanov.tgwsproxy.ui.BrandDialog
 import com.amurcanov.tgwsproxy.ui.BrandOutlineButton
 import com.amurcanov.tgwsproxy.ui.MonoLabel
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+
 
 /**
  * "Change strategy" dialog (parity G-05): lists the pinned strategies and applies
@@ -35,19 +34,11 @@ import kotlinx.coroutines.launch
 internal fun DpiStrategyPickerDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val store = remember(context) { DpiSettingsStore(context) }
-    val scope = rememberCoroutineScope()
+
     val pinned = remember { store.pinnedHistory() }
 
     fun apply(command: DpiCommand) {
-        store.applyStrategy(command.text)
-        val wasRunning = DpiSession.state.value is DpiState.Running || DpiSession.state.value is DpiState.Starting
-        if (wasRunning) {
-            DpiSession.stop(context)
-            scope.launch {
-                DpiSession.state.first { it is DpiState.Off || it is DpiState.Failed }
-                DpiSession.start(context)
-            }
-        }
+        DpiSession.applyStrategy(context, command.text)
         onDismiss()
     }
 
