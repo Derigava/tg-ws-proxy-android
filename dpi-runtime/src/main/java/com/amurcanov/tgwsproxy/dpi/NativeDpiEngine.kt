@@ -21,7 +21,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * and death event to the current session, so a stale exit from a previous
  * session can never change a new one.
  */
-class NativeDpiEngine(private val context: Context) : DpiEngine {
+class NativeDpiEngine(
+    private val context: Context,
+    private val owner: IBinder? = null,
+) : DpiEngine {
     override var onExit: (() -> Unit)? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -56,6 +59,7 @@ class NativeDpiEngine(private val context: Context) : DpiEngine {
                 .putExtra(DpiProxyService.EXTRA_HOST, config.normalizedHost)
                 .putExtra(DpiProxyService.EXTRA_PORT, config.port)
                 .putExtra(DpiProxyService.EXTRA_RESULT_RECEIVER, receiver)
+                .putExtras(Bundle().apply { putBinder(DpiProxyService.EXTRA_OWNER, owner) })
         )
         val outcome = runBlocking {
             withTimeoutOrNull(DpiProxyService.START_TIMEOUT_MS) { session.acknowledged.await() }

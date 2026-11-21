@@ -82,6 +82,7 @@ android {
     // Old local builds may leave Rust binaries here; the Python-based application never ships them.
     sourceSets.getByName("main").jniLibs.setSrcDirs(emptyList<String>())
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/licenseAssets").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/dpiTestAssets").get().asFile)
     testOptions {
         unitTests.isReturnDefaultValues = true
         // Compose UI tests run under Robolectric in the JVM unit-test task, so
@@ -140,4 +141,10 @@ val licenseNotices by tasks.registering(Sync::class) {
     from(rootProject.file("licenses/fonts"))
     into(layout.buildDirectory.dir("generated/licenseAssets/licenses"))
 }
-tasks.named("preBuild") { dependsOn(licenseNotices) }
+val dpiStrategies by tasks.registering(Sync::class) {
+    from(rootProject.file("upstream/byebyedpi/app/src/main/assets")) {
+        include("proxytest_strategies.list")
+    }
+    into(layout.buildDirectory.dir("generated/dpiTestAssets"))
+}
+tasks.named("preBuild") { dependsOn(licenseNotices, dpiStrategies) }

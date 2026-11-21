@@ -12,6 +12,8 @@ import com.amurcanov.tgwsproxy.dpi.DpiEngineResult
 import com.amurcanov.tgwsproxy.dpi.DpiMode
 import com.amurcanov.tgwsproxy.dpi.DpiRemoteSession
 import com.amurcanov.tgwsproxy.dpi.DpiState
+import com.amurcanov.tgwsproxy.dpi.DpiStrategyCandidate
+import com.amurcanov.tgwsproxy.dpi.DpiStrategyTester
 import com.amurcanov.tgwsproxy.dpi.DpiVpnEngine
 import com.amurcanov.tgwsproxy.dpi.DpiVpnService
 import com.amurcanov.tgwsproxy.dpi.NativeDpiEngine
@@ -28,6 +30,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.net.ServerSocket
+import java.net.Socket
 
 @RunWith(AndroidJUnit4::class)
 class DpiLifecycleInstrumentedTest {
@@ -42,6 +45,37 @@ class DpiLifecycleInstrumentedTest {
         val config = DpiConfig(DpiMode.SOCKS5, port = freePort())
         assertEquals(DpiEngineResult.Running, NativeDpiEngine(context).start(config))
         assertRestoresAndStops(config, previouslyIdle)
+    }
+
+    @Test
+    fun strategyTestReusesNativeSocksWithoutChangingTheSelectedMode() = withForeground {
+        val holder = DpiSessionHolder()
+        val port = freePort()
+        val scores = mutableListOf<Int>()
+        withContext(Dispatchers.Main) {
+            val tested = holder.runStrategyTest(context) {
+                val engine = NativeDpiEngine(context, owner = android.os.Binder())
+                val tester = DpiStrategyTester(engine, probe = { probePort, _ ->
+                    Socket("127.0.0.1", probePort).use { socket ->
+                        socket.soTimeout = 1_000
+                        socket.getOutputStream().write(byteArrayOf(5, 1, 0))
+                        val response = socket.getInputStream()
+                        response.read() == 5 && response.read() == 0
+                    }
+                })
+                tester.test(
+                    listOf(DpiStrategyCandidate("-o1", listOf("-o1")), DpiStrategyCandidate("-s1", listOf("-s1"))),
+                    port,
+                ) {
+                    assertNull(DpiRemoteSession.inspect(context, DpiMode.SOCKS5))
+                    scores.add(it.reachable)
+                }
+            }
+            assertEquals(true, tested)
+            assertEquals(DpiMode.VPN, holder.mode.value)
+            assertEquals(DpiState.Off, holder.state.value)
+        }
+        assertEquals(listOf(3, 3), scores)
     }
 
     @Suppress("DEPRECATION")
