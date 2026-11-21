@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.RemoteException
 import android.os.Process
 import android.os.ResultReceiver
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import io.github.romanvht.byedpi.core.ByeDpiProxy
@@ -41,6 +42,9 @@ class DpiProxyService : Service() {
         const val ACTION_START = "io.github.derigava.tgwsproxy.dpi.START"
         internal const val ACTION_BIND_PROBE = "io.github.derigava.tgwsproxy.dpi.BIND_PROBE"
         const val ACTION_STOP = "io.github.derigava.tgwsproxy.dpi.STOP"
+        internal const val ACTION_CANCEL = "io.github.derigava.tgwsproxy.dpi.CANCEL"
+        internal const val EXTRA_ATTEMPT_ID = "EXTRA_ATTEMPT_ID"
+        internal const val EXTRA_DEADLINE = "EXTRA_DEADLINE"
         const val EXTRA_ARGS = "EXTRA_ARGS"
         const val EXTRA_HOST = "EXTRA_HOST"
         const val EXTRA_PORT = "EXTRA_PORT"
@@ -65,6 +69,7 @@ class DpiProxyService : Service() {
     private var endpoint: String? = null
     private val proxy by lazy { ByeDpiProxy() }
     private var engineThread: Thread? = null
+    @Volatile private var activeAttemptId: String? = null
     private val startup = SocksStartupState()
 
     @Volatile
@@ -107,6 +112,10 @@ class DpiProxyService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> start(intent, foreground = true)
+            ACTION_CANCEL -> {
+                if (intent.getStringExtra(EXTRA_ATTEMPT_ID) == activeAttemptId && activeAttemptId != null) stop()
+                else if (activeAttemptId == null) stopSelfResult(startId)
+            }
             ACTION_STOP -> stop()
             else -> stopSelfResult(startId)
         }
@@ -120,12 +129,16 @@ class DpiProxyService : Service() {
         val host = intent.getStringExtra(EXTRA_HOST)
         val port = intent.getIntExtra(EXTRA_PORT, -1)
         val receiver = intent.getParcelableExtra<ResultReceiver>(EXTRA_RESULT_RECEIVER)
-        if (args.isNullOrEmpty() || host.isNullOrBlank() || port !in 1..65535) {
+        val id = intent.getStringExtra(EXTRA_ATTEMPT_ID)
+        val deadline = intent.getLongExtra(EXTRA_DEADLINE, 0)
+        if (args.isNullOrEmpty() || host.isNullOrBlank() || port !in 1..65535 || id.isNullOrBlank()) {
             report(receiver, "invalid engine configuration")
             terminate()
             return
         }
 
+        activeAttemptId = id
+        val attempt = SocksStartAttempt(id, deadline)
         // A temporary strategy probe must end when the process running it dies.
         val owner = intent.extras?.getBinder(EXTRA_OWNER)
         if (owner != null) {
@@ -145,6 +158,11 @@ class DpiProxyService : Service() {
         // death monitoring before the engine is ready.
         receiver?.send(RESULT_SESSION, Bundle().apply { putBinder(EXTRA_BINDER, sessionBinder) })
         if (foreground) startForeground(notification(getString(R.string.dpi_notification_running)))
+        if (!attempt.active(SystemClock.elapsedRealtime(), activeAttemptId)) {
+            report(receiver, "SOCKS5 startup timed out")
+            terminate()
+            return
+        }
 
         engineThread = thread(name = "ByeDPI") {
             try {
@@ -161,8 +179,7 @@ class DpiProxyService : Service() {
         }
 
         thread(name = "ByeDPIMonitor") {
-            val deadline = System.currentTimeMillis() + START_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadline) {
+            while (attempt.active(SystemClock.elapsedRealtime(), activeAttemptId)) {
                 val error = engineError
                 if (error != null) {
                     report(receiver, error)
@@ -172,11 +189,15 @@ class DpiProxyService : Service() {
                 // Positive ownership: OUR engine called listen() (native signal)
                 // and answers the SOCKS5 handshake.
                 if (DpiNative.isListenerReady() != 0 && socks5Ready(host, port)) {
-                    startup.publishReady {
-                        ready = true
-                        receiver?.send(RESULT_STARTED, Bundle())
+                    if (attempt.active(SystemClock.elapsedRealtime(), activeAttemptId)) {
+                        startup.publishReady {
+                            if (attempt.active(SystemClock.elapsedRealtime(), activeAttemptId)) {
+                                ready = true
+                                receiver?.send(RESULT_STARTED, Bundle())
+                            }
+                        }
+                        if (ready) return@thread
                     }
-                    return@thread
                 }
                 Thread.sleep(POLL_MS)
             }
@@ -189,6 +210,7 @@ class DpiProxyService : Service() {
     private fun stop() {
         stopping = true
         startup.stop()
+        activeAttemptId = null
         endpoint = null
         runCatching { proxy.stopProxy() }
         engineThread?.join(2_000)

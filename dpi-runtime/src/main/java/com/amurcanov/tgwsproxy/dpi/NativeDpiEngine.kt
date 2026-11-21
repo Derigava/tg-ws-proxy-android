@@ -9,6 +9,8 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ResultReceiver
+import android.os.SystemClock
+import java.util.UUID
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
@@ -41,6 +43,7 @@ class NativeDpiEngine(
             return DpiEngineResult.Failed("SOCKS5 bind host must be loopback, got ${config.host}")
         }
         val myGeneration = ++generation
+        val attempt = SocksStartAttempt(UUID.randomUUID().toString(), SystemClock.elapsedRealtime() + DpiProxyService.START_TIMEOUT_MS)
         val argv = config.toArgv()
         val session = StartSession(myGeneration)
         val receiver = object : ResultReceiver(mainHandler) {
@@ -56,6 +59,8 @@ class NativeDpiEngine(
             }
         }
         val intent = Intent(context, DpiProxyService::class.java)
+            .putExtra(DpiProxyService.EXTRA_ATTEMPT_ID, attempt.id)
+            .putExtra(DpiProxyService.EXTRA_DEADLINE, attempt.deadline)
             .putStringArrayListExtra(DpiProxyService.EXTRA_ARGS, ArrayList(argv.toList()))
             .putExtra(DpiProxyService.EXTRA_HOST, config.normalizedHost)
             .putExtra(DpiProxyService.EXTRA_PORT, config.port)
@@ -76,8 +81,22 @@ class NativeDpiEngine(
             probe = connection to session
         }
         val outcome = runBlocking {
-            withTimeoutOrNull(DpiProxyService.START_TIMEOUT_MS) { session.acknowledged.await() }
-        } ?: DpiEngineResult.Failed("SOCKS5 proxy not ready on ${config.normalizedHost}:${config.port}")
+            attempt.await(session.acknowledged, SystemClock::elapsedRealtime) { id ->
+                session.cancelling = true
+                runCatching {
+                    context.startService(Intent(context, DpiProxyService::class.java)
+                        .setAction(DpiProxyService.ACTION_CANCEL)
+                        .putExtra(DpiProxyService.EXTRA_ATTEMPT_ID, id))
+                }
+                val exited = withTimeoutOrNull(6_000) { session.exited.await(); true } ?: false
+                if (owner != null) {
+                    probe?.let { context.unbindService(it.first) }
+                    probe = null
+                }
+                generation++
+                exited
+            }
+        }
         return outcome
     }
 
@@ -113,6 +132,7 @@ class NativeDpiEngine(
         val exited = CompletableDeferred<Unit>()
         private var sessionBinder: IBinder? = null
         private var ready = false
+        @Volatile var cancelling = false
 
         private val deathRecipient = IBinder.DeathRecipient {
             mainHandler.post { onDeath() }
@@ -134,6 +154,7 @@ class NativeDpiEngine(
         }
 
         fun onReady() {
+            if (cancelling) return
             ready = true
             if (exited.isCompleted) {
                 acknowledged.complete(DpiEngineResult.Failed("engine exited during startup"))
@@ -148,7 +169,9 @@ class NativeDpiEngine(
 
         fun onDeath() {
             if (!exited.complete(Unit) || myGeneration != generation) return
-            if (ready) onExit?.invoke() else onFailure("engine exited during startup")
+            if (!cancelling) {
+                if (ready) onExit?.invoke() else onFailure("engine exited during startup")
+            }
         }
     }
 }
