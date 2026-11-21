@@ -294,10 +294,12 @@ class ProxyService : Service() {
         val open = PendingIntent.getActivity(this, 1, Intent(this, MainActivity::class.java), flags)
         fun action(name: String, code: Int) = PendingIntent.getService(this, code,
             Intent(this, ProxyService::class.java).setAction(name), flags)
+        val stop = PendingIntent.getBroadcast(this, 3,
+            Intent(this, ProxyNotificationStopReceiver::class.java).setAction(ACTION_STOP), flags)
         return NotificationCompat.Builder(this, CHANNEL).setContentTitle(getString(R.string.app_name))
             .setContentText(text).setSmallIcon(R.drawable.ic_mark_mono).setContentIntent(open)
             .addAction(android.R.drawable.ic_popup_sync, getString(R.string.notification_restart), action(ACTION_RESTART, 2))
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.notification_disconnect), action(ACTION_STOP, 3))
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.notification_disconnect), stop)
             .setOngoing(true).setOnlyAlertOnce(true).setSilent(true).setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_SERVICE).setPriority(NotificationCompat.PRIORITY_LOW).build()
     }
