@@ -153,7 +153,8 @@ fun ConnectionTab(
 
     // Immutable replacement proof minted before the offer dialog is shown; reused
     // on confirm, never re-minted against a freshly sampled VPN.
-    var pendingOffer by remember { mutableStateOf<Pair<Boolean, VpnReplacement>?>(null) }
+    var pendingOffer by remember { mutableStateOf<Triple<Boolean, VpnReplacement, String>?>(null) }
+    var pendingConsentAttempt by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingConsentSlot by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingConsentNetworks by rememberSaveable { mutableStateOf<LongArray?>(null) }
     var showStrategyPicker by remember { mutableStateOf(false) }
@@ -176,11 +177,12 @@ fun ConnectionTab(
     // re-enters startVpn only after the launcher is available.
     lateinit var prepareConsentLauncher: androidx.activity.result.ActivityResultLauncher<Unit>
 
-    val handleRefusal: (VpnRefuseReason, VpnReplacement?, Boolean) -> Unit = { reason, proof, canPrompt ->
+    val handleRefusal: (VpnRefuseReason, VpnReplacement?, Boolean, String) -> Unit = { reason, proof, canPrompt, attempt ->
         when (reason) {
             VpnRefuseReason.CONSENT_NOT_GRANTED -> if (canPrompt) {
                 pendingConsentSlot = proof?.confirmedSlot?.name
                 pendingConsentNetworks = proof?.confirmedNetworks?.toLongArray()
+                pendingConsentAttempt = attempt
                 prepareConsentLauncher.launch(Unit)
             } else showDpiError(msgConsentLost)
             VpnRefuseReason.CONSENT_LOST -> showDpiError(msgConsentLost)
@@ -190,7 +192,8 @@ fun ConnectionTab(
         }
     }
 
-    val startVpn: (VpnReplacement?, Boolean) -> Unit = { replacement, canPrompt ->
+    val startVpn: (VpnReplacement?, Boolean, String) -> Unit = start@{ replacement, canPrompt, attempt ->
+        if (!DpiSession.isInteractiveStartCurrent(attempt)) return@start
         val authorizer = DpiSession.vpnAuthorizer(context)
         when (val decision = authorizer.authorize(replacement)) {
             is VpnStartDecision.Start -> DpiSession.start(context, replacement)
@@ -201,28 +204,38 @@ fun ConnectionTab(
                 if (proof == null) {
                     showDpiError(msgOfferUncertain)
                 } else {
-                    pendingOffer = decision.ownerUncertain to proof
+                    pendingOffer = Triple(decision.ownerUncertain, proof, attempt)
                 }
             }
-            is VpnStartDecision.Refuse -> handleRefusal(decision.reason, replacement, canPrompt)
+            is VpnStartDecision.Refuse -> handleRefusal(decision.reason, replacement, canPrompt, attempt)
         }
     }
 
     val startDpi: () -> Unit = {
-        if (dpiMode == DpiMode.VPN) startVpn(null, true) else DpiSession.start(context)
+        if (dpiMode == DpiMode.VPN) startVpn(null, true, DpiSession.beginInteractiveStart()) else DpiSession.start(context)
     }
 
     val onToggleDpi: () -> Unit = {
-        if (dpiIsActive) DpiSession.stop(context) else startDpi()
+        if (dpiIsActive || pendingConsentAttempt != null || pendingOffer != null) {
+            pendingOffer = null
+            DpiSession.stop(context)
+        } else startDpi()
     }
 
     prepareConsentLauncher = rememberLauncherForActivityResult(VpnPrepareContract()) { granted ->
+        val attempt = pendingConsentAttempt
         val proof = pendingConsentSlot?.let { slot ->
             VpnReplacement(VpnSlotState.valueOf(slot), pendingConsentNetworks?.toSet() ?: emptySet())
         }
         pendingConsentSlot = null
         pendingConsentNetworks = null
-        if (granted) startVpn(proof, false) else showDpiError(msgConsentDenied)
+        pendingConsentAttempt = null
+        if (DpiSession.isInteractiveStartCurrent(attempt)) {
+            if (granted) startVpn(proof, false, checkNotNull(attempt)) else {
+                DpiSession.cancelInteractiveStart()
+                showDpiError(msgConsentDenied)
+            }
+        }
     }
 
     Column(
@@ -306,9 +319,9 @@ fun ConnectionTab(
 
     // VPN replacement offer: the proof was captured before this dialog, so the
     // confirm action only re-validates and reuses it.
-    pendingOffer?.let { (ownerUncertain, proof) ->
+    pendingOffer?.let { (ownerUncertain, proof, attempt) ->
         BrandDialog(
-            onDismiss = { pendingOffer = null },
+            onDismiss = { pendingOffer = null; DpiSession.cancelInteractiveStart() },
             modifier = Modifier.fillMaxWidth(0.92f)
         ) {
             Text(
@@ -327,7 +340,7 @@ fun ConnectionTab(
                 text = stringResource(R.string.vpn_offer_replace),
                 onClick = {
                     pendingOffer = null
-                    startVpn(proof, true)
+                    startVpn(proof, true, attempt)
                 }
             )
             Spacer(Modifier.height(8.dp))
@@ -335,13 +348,13 @@ fun ConnectionTab(
                 text = stringResource(R.string.vpn_offer_socks5),
                 onClick = {
                     pendingOffer = null
-                    if (DpiSession.switchMode(context, DpiMode.SOCKS5)) DpiSession.start(context)
+                    if (DpiSession.isInteractiveStartCurrent(attempt) && DpiSession.switchMode(context, DpiMode.SOCKS5)) DpiSession.start(context)
                 }
             )
             Spacer(Modifier.height(8.dp))
             BrandLink(
                 text = stringResource(R.string.vpn_offer_cancel),
-                onClick = { pendingOffer = null }
+                onClick = { pendingOffer = null; DpiSession.cancelInteractiveStart() }
             )
         }
     }
