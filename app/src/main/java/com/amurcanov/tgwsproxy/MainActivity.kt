@@ -82,19 +82,12 @@ class MainActivity : ComponentActivity() {
             }
 
             TgWsProxyTheme(themeMode = themeMode) {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
-                        density = androidx.compose.ui.platform.LocalDensity.current.density,
-                        fontScale = 1f
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Brand.bg)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Brand.bg)
-                    ) {
-                        MainContent(settingsStore)
-                    }
+                    MainContent(settingsStore)
                 }
             }
         }
