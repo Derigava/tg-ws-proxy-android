@@ -32,6 +32,14 @@ import kotlinx.coroutines.launch
 
 internal val DpiSession = DpiSessionHolder()
 
+/** A consent belongs to one user command, never to a later command or process. */
+internal class DpiAttemptGuard {
+    private var current: String? = null
+    fun begin(): String = java.util.UUID.randomUUID().toString().also { current = it }
+    fun invalidate() { current = null }
+    fun isCurrent(token: String?): Boolean = token != null && token == current
+}
+
 /**
  * Process-wide holder for the ByeByeDPI module: one [DpiController] for the
  * currently selected [DpiMode], the controller being the only source of the
@@ -50,6 +58,12 @@ internal val DpiSession = DpiSessionHolder()
  * visible offer is decided, and reused only if the fresh re-check still matches.
  */
 internal class DpiSessionHolder {
+
+    private val attempts = DpiAttemptGuard()
+    fun beginInteractiveStart(): String = attempts.begin()
+    fun isInteractiveStartCurrent(token: String?): Boolean =
+        attempts.isCurrent(token) && _mode.value == DpiMode.VPN
+    fun cancelInteractiveStart() = attempts.invalidate()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -106,6 +120,8 @@ internal class DpiSessionHolder {
         val current = controller?.state?.value ?: return false
         if (current !is DpiState.Off && current !is DpiState.Failed) return false
         if (newMode == _mode.value) return true
+        attempts.invalidate()
+        commandVersion++
         _mode.value = newMode
         rebuild(context.applicationContext)
         return true
@@ -149,6 +165,7 @@ internal class DpiSessionHolder {
     }
 
     fun stop(context: Context) {
+        attempts.invalidate()
         commandVersion++
         strategyTest?.let {
             it.cancel()
