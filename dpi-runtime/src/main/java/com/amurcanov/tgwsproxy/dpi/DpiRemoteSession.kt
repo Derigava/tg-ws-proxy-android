@@ -69,9 +69,10 @@ class DpiRemoteSession private constructor(
                 override fun onServiceConnected(name: ComponentName, binder: IBinder) {
                     val receiver = Messenger(Handler(Looper.getMainLooper()) { reply ->
                         val endpoint = reply.data.getString(ENDPOINT)
-                        result.complete(endpoint?.let {
-                            DpiRemoteSession(mode, it, reply.data.getBoolean(READY), binder)
-                        })
+                        // A successful bind proves the process exists. A missing endpoint
+                        // is an incomplete status, not evidence that the slot is free.
+                        if (endpoint.isNullOrBlank()) result.completeExceptionally(unavailable)
+                        else result.complete(DpiRemoteSession(mode, endpoint, reply.data.getBoolean(READY), binder))
                         true
                     })
                     try {
