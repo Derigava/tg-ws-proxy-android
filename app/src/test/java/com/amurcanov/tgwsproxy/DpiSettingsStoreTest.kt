@@ -3,6 +3,9 @@ package com.amurcanov.tgwsproxy
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.amurcanov.tgwsproxy.dpi.DpiSettingsStore
+import com.amurcanov.tgwsproxy.dpi.DpiProbeTarget
+import com.amurcanov.tgwsproxy.dpi.DpiStrategyCandidate
+import com.amurcanov.tgwsproxy.dpi.DpiStrategyResult
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -17,6 +20,28 @@ class DpiSettingsStoreTest {
     private val store = DpiSettingsStore(context)
     // Fixture matches the AppSettings/Command/DomainList DTOs at v.1.8.2.
     private val fixture = """{"app":"io.github.romanvht.byedpi","version":"1.8.2","settings":{"byedpi_proxy_port":"1080","ipv6_enable":true},"apps":["org.example.client"],"history":[{"text":"-s1","pinned":true}],"domainLists":[{"id":"test","name":"Example","domains":["example.org"]}]}"""
+
+    @Test fun fullPassesPersistWithoutApplyingOrDuplicatingStrategies() {
+        store.importJson(fixture)
+        val before = store.exportJson()
+        val first = DpiStrategyCandidate("-d1", listOf("-d1"))
+        val second = DpiStrategyCandidate("-s2", listOf("-s2"))
+        val full = DpiProbeTarget.entries.toSet()
+
+        store.saveSuccessfulStrategy(DpiStrategyResult(first, setOf(DpiProbeTarget.WEB)))
+        assertEquals(emptyList<String>(), store.successfulStrategies())
+        store.saveSuccessfulStrategy(DpiStrategyResult(first, full))
+        store.saveSuccessfulStrategy(DpiStrategyResult(second, full))
+        store.saveSuccessfulStrategy(DpiStrategyResult(first, full))
+
+        val reopened = DpiSettingsStore(context)
+        assertEquals(listOf("-s2", "-d1"), reopened.successfulStrategies())
+        assertEquals(before, reopened.exportJson())
+        assertTrue(reopened.strategyCandidates(emptySequence()).any { it.command == "-s2" })
+
+        reopened.resetSettings()
+        assertEquals(emptyList<String>(), DpiSettingsStore(context).successfulStrategies())
+    }
 
     @Test fun pinnedFormatRoundTripsAllSectionsWithoutTgKeys() {
         store.importJson(fixture.replace("\"ipv6_enable\":true", "\"ipv6_enable\":true,\"secret_key\":\"not-for-export\""))

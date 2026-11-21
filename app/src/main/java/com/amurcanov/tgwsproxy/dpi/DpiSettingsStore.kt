@@ -136,6 +136,22 @@ internal class DpiSettingsStore(context: Context) {
 
     fun clearUnpinnedHistory() = mutateHistory { current -> current.filter { it.pinned } }
 
+    fun successfulStrategies(): List<String> {
+        val saved = JSONArray(preferences.getString(SUCCESSFUL_STRATEGIES, "[]") ?: "[]")
+        return (0 until saved.length()).map { saved.getString(it) }
+    }
+
+    fun saveSuccessfulStrategy(result: DpiStrategyResult) {
+        if (result.startFailed || result.reachable != DpiProbeTarget.entries.size) return
+        val saved = successfulStrategies()
+        val command = result.candidate.command
+        if (command in saved) return
+        val next = JSONArray(listOf(command) + saved)
+        check(preferences.edit().putString(SUCCESSFUL_STRATEGIES, next.toString()).commit()) {
+            "Could not save successful ByeByeDPI strategy"
+        }
+    }
+
     fun strategyCandidates(builtIn: Sequence<String>): List<DpiStrategyCandidate> {
         val snapshot = JSONObject(exportJson())
         val settings = snapshot.optJSONObject("settings") ?: JSONObject()
@@ -148,7 +164,8 @@ internal class DpiSettingsStore(context: Context) {
         } else {
             settings.section("byedpi_cmd_args") as? String ?: DEFAULT_CMD_ARGS
         }
-        return (sequenceOf(current) + pinnedHistory().asSequence().map { it.text } + builtIn)
+        val saved = pinnedHistory().asSequence().map { it.text } + successfulStrategies().asSequence()
+        return (sequenceOf(current) + saved + builtIn)
             .map { it.trim().replace("{sni}", "google.com") }
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .distinct()
@@ -169,7 +186,10 @@ internal class DpiSettingsStore(context: Context) {
 
     /** Resets to a default document (parity X-03), dropping all settings, history and apps. */
     fun resetSettings() {
-        check(preferences.edit().putString("backup", document().put("settings", JSONObject()).toString()).commit()) {
+        val reset = preferences.edit()
+            .putString("backup", document().put("settings", JSONObject()).toString())
+            .remove(SUCCESSFUL_STRATEGIES)
+        check(reset.commit()) {
             "Could not reset ByeByeDPI settings"
         }
     }
@@ -594,6 +614,7 @@ internal class DpiSettingsStore(context: Context) {
         const val UPSTREAM_APP = "io.github.romanvht.byedpi"
         const val MAX_CHARS = 2 * 1024 * 1024
         const val DEFAULT_CMD_ARGS = "-o1 -a1 -r-5+se"
+        private const val SUCCESSFUL_STRATEGIES = "successful_strategies"
         const val MAX_HISTORY = 40
         val DOMAIN_FLAGS = setOf("isActive", "isBuiltIn", "isModified", "isDeleted")
         val SETTINGS_KEYS = setOf(
