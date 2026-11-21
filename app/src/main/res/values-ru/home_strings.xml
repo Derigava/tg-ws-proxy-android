@@ -1,0 +1,21 @@
+<resources>
+    <string name="home_telegram">Telegram</string>
+    <string name="home_youtube">YouTube</string>
+    <string name="home_discord">Discord</string>
+    <string name="home_proxy">ПРОКСИ</string>
+    <string name="home_vpn">VPN</string>
+    <string name="home_tg_subtitle">Работает вместе с твоим VPN</string>
+    <string name="home_vpn_subtitle">Занимает VPN-слот Android</string>
+    <string name="home_vpn_warning">[!] Сейчас включён другой VPN. Для YouTube или Discord его, возможно, придётся отключить. Telegram продолжит работать рядом с ним.</string>
+    <string name="home_socks_warning">Режим SOCKS5: настрой прокси в приложениях. Это не VPN-соединение.</string>
+    <string name="home_start">Запустить выбранные сервисы</string>
+    <string name="home_stop">Остановить сервисы</string>
+    <string name="home_socks_running">SOCKS5-прокси запущен; приложения нужно настроить</string>
+    <string name="home_partial">Не все выбранные сервисы работают</string>
+    <string name="home_select">Выбери хотя бы один сервис</string>
+    <string name="home_repair">Не работает? Починить</string>
+    <string name="home_offer_title">Возможно, включён другой VPN</string>
+    <string name="home_offer_body">При запуске VPN текущее VPN-соединение может отключиться. Telegram может работать рядом с ним. Продолжить?</string>
+    <string name="home_offer_replace">Заменить VPN</string>
+    <string name="home_offer_socks">Использовать SOCKS5</string>
+</resources>

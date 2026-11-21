@@ -40,6 +40,7 @@ import com.amurcanov.tgwsproxy.consumeDpiShortcutStart
 import com.amurcanov.tgwsproxy.ProxyController
 import com.amurcanov.tgwsproxy.ProxyService
 import com.amurcanov.tgwsproxy.R
+import com.amurcanov.tgwsproxy.ServiceSelectionStore
 import com.amurcanov.tgwsproxy.SettingsStore
 import com.amurcanov.tgwsproxy.TelegramConnector
 import com.amurcanov.tgwsproxy.dpi.DpiMode
@@ -91,66 +92,40 @@ fun ConnectionTab(
         return
     }
 
-    // Auto-generate secret if empty
-    LaunchedEffect(savedSecretKey) {
-        if (savedSecretKey == "") {
-            val bytes = ByteArray(16)
-            java.security.SecureRandom().nextBytes(bytes)
-            val generated = bytes.joinToString("") { "%02x".format(it) }
-            scope.launch { settingsStore.saveSecretKey(generated) }
-        }
-    }
-
     val isStarting by ProxyService.isStarting.collectAsStateWithLifecycle()
-    val cursorState = when {
-        isVerifiedRunning -> CursorVisualState.On
-        isStarting || isRunning -> CursorVisualState.Connecting
+    val proxyUrl = activeConnection?.let { TelegramConnector.proxyUri(it).toString() }.orEmpty()
+    val dpiIsActive = dpiState is DpiState.Running || dpiState is DpiState.Starting || dpiState is DpiState.Stopping
+    val selectionStore = remember(context) { ServiceSelectionStore(context) }
+    val selection by selectionStore.changes.collectAsStateWithLifecycle(initialValue = selectionStore.read())
+    var foreignVpnVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(selection.needsDpi, dpiState, dpiMode) {
+        while (selection.needsDpi) {
+            // Passive network observation only: VpnService.prepare can claim the slot.
+            foreignVpnVisible = if (dpiState is DpiState.Running && dpiMode == DpiMode.VPN) false else runCatching {
+                val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+                @Suppress("DEPRECATION")
+                manager?.allNetworks?.any { network -> manager.getNetworkCapabilities(network)?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN) == true } == true
+            }.getOrDefault(false)
+            kotlinx.coroutines.delay(2000)
+        }
+        foreignVpnVisible = false
+    }
+    val anyActive = isRunning || isStarting || dpiIsActive
+    val anySelected = selection.telegram || selection.needsDpi
+    val allRunning = anySelected && (!selection.telegram || isVerifiedRunning) && (!selection.needsDpi || dpiState is DpiState.Running) && (!isRunning || selection.telegram) && (!dpiIsActive || selection.needsDpi)
+    val visual = when {
+        isStarting || (isRunning && !isVerifiedRunning) || dpiState is DpiState.Starting || dpiState is DpiState.Stopping -> CursorVisualState.Connecting
+        allRunning -> CursorVisualState.On
         else -> CursorVisualState.Off
     }
-    val statusText = when (cursorState) {
-        CursorVisualState.On -> stringResource(R.string.status_connected)
-        CursorVisualState.Connecting -> stringResource(R.string.status_connecting)
-        CursorVisualState.Off -> stringResource(R.string.status_disconnected)
+    val statusText = when {
+        visual == CursorVisualState.Connecting -> stringResource(R.string.status_connecting)
+        visual == CursorVisualState.On && selection.needsDpi && dpiMode == DpiMode.SOCKS5 -> stringResource(R.string.home_socks_running)
+        visual == CursorVisualState.On -> stringResource(R.string.status_connected)
+        anyActive || dpiState is DpiState.Failed -> stringResource(R.string.home_partial)
+        !anySelected -> stringResource(R.string.home_select)
+        else -> stringResource(R.string.status_disconnected)
     }
-
-    val proxyUrl = activeConnection?.let { TelegramConnector.proxyUri(it).toString() }.orEmpty()
-    val isActiveVisual = isRunning || isStarting
-    val toggle: () -> Unit = {
-        if (isActiveVisual) {
-            ProxyController.stop(context)
-        } else {
-            scope.launch {
-                ProxyController.startFromSavedSettings(context = context, showInvalidPortToast = true)
-            }
-        }
-    }
-
-    // --- ByeByeDPI state mapping and command flow ---------------------------
-    val dpiIsActive = dpiState is DpiState.Running || dpiState is DpiState.Starting || dpiState is DpiState.Stopping
-    val dpiVisual = when (dpiState) {
-        is DpiState.Running -> CursorVisualState.On
-        is DpiState.Starting, is DpiState.Stopping -> CursorVisualState.Connecting
-        is DpiState.Off, is DpiState.Failed -> CursorVisualState.Off
-    }
-    val dpiStatusText = when (dpiState) {
-        is DpiState.Running ->
-            if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_status_vpn_running)
-            else stringResource(R.string.dpi_status_socks5_running)
-        is DpiState.Starting, is DpiState.Stopping -> stringResource(R.string.status_connecting)
-        is DpiState.Failed -> stringResource(R.string.status_disconnected)
-        is DpiState.Off -> stringResource(R.string.status_disconnected)
-    }
-    val dpiAddressText = when {
-        dpiState is DpiState.Running ->
-            if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_mode_vpn)
-            else dpiEndpoint ?: stringResource(R.string.dpi_mode_socks5)
-        dpiState is DpiState.Failed -> (dpiState as DpiState.Failed).reason
-        dpiMode == DpiMode.VPN -> stringResource(R.string.dpi_start_hint_vpn)
-        else -> stringResource(R.string.dpi_start_hint_socks5)
-    }
-    val dpiActionDescription = if (dpiIsActive || dpiState is DpiState.Failed) stringResource(R.string.dpi_action_stop)
-    else if (dpiMode == DpiMode.VPN) stringResource(R.string.dpi_action_start_vpn)
-    else stringResource(R.string.dpi_action_start_socks5)
 
     // Immutable replacement proof minted before the offer dialog is shown; reused
     // on confirm, never re-minted against a freshly sampled VPN.
@@ -216,13 +191,6 @@ fun ConnectionTab(
         if (dpiMode == DpiMode.VPN) startVpn(null, true, DpiSession.beginInteractiveStart()) else DpiSession.start(context)
     }
 
-    val onToggleDpi: () -> Unit = {
-        if (dpiIsActive || dpiState is DpiState.Failed || pendingConsentAttempt != null || pendingOffer != null) {
-            pendingOffer = null
-            DpiSession.stop(context)
-        } else startDpi()
-    }
-
     prepareConsentLauncher = rememberLauncherForActivityResult(VpnPrepareContract()) { granted ->
         val attempt = pendingConsentAttempt
         val proof = pendingConsentSlot?.let { slot ->
@@ -253,33 +221,22 @@ fun ConnectionTab(
             .padding(bottom = 16.dp)
     ) {
         BrandHeader(section = stringResource(R.string.nav_proxy))
-        Spacer(Modifier.height(8.dp))
-        ScreenTitle(stringResource(R.string.app_name))
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = stringResource(R.string.proxy_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Brand.muted
-        )
-
         DualModuleControls(
-            tg = ModuleControls(
-                moduleLabel = "TG-WS",
-                visualState = cursorState,
-                actionDescription = stringResource(if (isActiveVisual) R.string.action_stop_proxy else R.string.action_start_proxy),
-                statusText = statusText,
-                addressText = activeConnection?.let { "${TelegramConnector.localHost(it.host)}:${it.port}" }
-                    ?: stringResource(R.string.proxy_start_hint),
-                onToggle = toggle
-            ),
-            dpi = ModuleControls(
-                moduleLabel = "ByeByeDPI",
-                visualState = dpiVisual,
-                actionDescription = dpiActionDescription,
-                statusText = dpiStatusText,
-                addressText = dpiAddressText,
-                onToggle = { onToggleDpi() }
-            ),
+            selection = selection,
+            onSelectionChange = { selectionStore.save(it) },
+            visualState = visual,
+            status = statusText,
+            powerDescription = stringResource(if (anyActive || pendingConsentAttempt != null || pendingOffer != null) R.string.home_stop else R.string.home_start),
+            onPower = {
+                val plan = homePowerPlan(selection, isRunning || isStarting, dpiIsActive, pendingConsentAttempt != null || pendingOffer != null)
+                if (plan.stopDpi) DpiSession.stop(context)
+                if (plan.stopTelegram) ProxyController.stop(context)
+                if (plan.stopDpi) pendingOffer = null
+                if (plan.startTelegram) scope.launch { ProxyController.startFromSavedSettings(context = context, showInvalidPortToast = true) }
+                if (plan.startDpi) startDpi()
+            },
+            showVpnWarning = selection.needsDpi && foreignVpnVisible,
+            socksMode = dpiMode == DpiMode.SOCKS5,
             applyInTelegramEnabled = activeConnection != null,
             onApplyInTelegram = { activeConnection?.let { TelegramConnector.open(context, it) } }
         )
@@ -291,7 +248,7 @@ fun ConnectionTab(
         )
 
         BrandLink(
-            text = stringResource(R.string.dpi_strategy_test),
+            text = stringResource(R.string.home_repair),
             onClick = { showStrategyTest = true },
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -326,25 +283,25 @@ fun ConnectionTab(
 
     // VPN replacement offer: the proof was captured before this dialog, so the
     // confirm action only re-validates and reuses it.
-    pendingOffer?.let { (ownerUncertain, proof, attempt) ->
+    pendingOffer?.let { (_, proof, attempt) ->
         BrandDialog(
             onDismiss = { pendingOffer = null; DpiSession.cancelInteractiveStart() },
             modifier = Modifier.fillMaxWidth(0.92f)
         ) {
             Text(
-                stringResource(R.string.vpn_offer_title),
+                stringResource(R.string.home_offer_title),
                 style = MaterialTheme.typography.titleLarge,
                 color = Brand.ink
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                stringResource(if (ownerUncertain) R.string.vpn_offer_body_uncertain else R.string.vpn_offer_body),
+                stringResource(R.string.home_offer_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Brand.muted
             )
             Spacer(Modifier.height(16.dp))
             BrandButton(
-                text = stringResource(R.string.vpn_offer_replace),
+                text = stringResource(R.string.home_offer_replace),
                 onClick = {
                     pendingOffer = null
                     startVpn(proof, true, attempt)
@@ -352,7 +309,7 @@ fun ConnectionTab(
             )
             Spacer(Modifier.height(8.dp))
             BrandOutlineButton(
-                text = stringResource(R.string.vpn_offer_socks5),
+                text = stringResource(R.string.home_offer_socks),
                 onClick = {
                     pendingOffer = null
                     if (DpiSession.isInteractiveStartCurrent(attempt) && DpiSession.switchMode(context, DpiMode.SOCKS5)) DpiSession.start(context)
