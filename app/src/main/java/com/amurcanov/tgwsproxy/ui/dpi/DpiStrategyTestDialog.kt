@@ -60,6 +60,12 @@ internal fun DpiStrategyTestDialog(onDismiss: () -> Unit) {
         if (!available && test.message != R.string.dpi_strategy_test_busy) {
             MonoLabel(stringResource(R.string.dpi_strategy_test_busy))
         }
+        if (dpiState is DpiState.Failed && !test.running) {
+            BrandOutlineButton(
+                text = stringResource(R.string.dpi_action_stop),
+                onClick = { DpiSession.stop(context) },
+            )
+        }
         if (test.total > 0) {
             MonoLabel(stringResource(R.string.dpi_strategy_test_progress, test.results.size, test.total))
         }
