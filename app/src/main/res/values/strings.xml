@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">TG-WS Proxy</string>
+    <string name="app_name">ByeBye TGWS Proxy</string>
     <string name="app_byline" translatable="false">by derigava_</string>
     <string name="status_connecting">&gt; CONNECTING</string>
     <string name="status_connected">[OK] CONNECTED</string>
@@ -71,11 +71,13 @@
     <string name="android_author_subtitle">amurcanov/tg-ws-proxy-android</string>
     <string name="android_fork_repo">Repository</string>
     <string name="android_fork_repo_subtitle">Source code and releases of this app</string>
+    <string name="dpi_upstream">DPI base</string>
+    <string name="dpi_upstream_subtitle">romanvht/ByeByeDPI</string>
     <string name="original_tg_ws_proxy">tg-ws-proxy core</string>
     <string name="original_tg_ws_proxy_subtitle">Original idea and code by Flowseal</string>
     <string name="useful_material">Useful reading</string>
     <string name="useful_material_subtitle">Notes on how the proxy works by IMDelewer</string>
-    <string name="unofficial_notice">// UNOFFICIAL APP, NOT AFFILIATED WITH TELEGRAM</string>
+    <string name="unofficial_notice">Unofficial app, not affiliated with Telegram.</string>
     <string name="update_postponed_24h">Update postponed for 24 hours</string>
     <string name="help_auto_dc_title">Auto and data center addresses</string>
     <string name="help_auto_dc_text">With Cloudflare on, DC addresses are set automatically, as on desktop: direct WebSocket to DC2 and DC4 first, then the CF route if that is unavailable. With Cloudflare off, the connection goes only straight to Telegram DCs and you can set addresses by hand. DC2 and DC4 are usually enough; the rest are for manual setup and diagnostics.</string>

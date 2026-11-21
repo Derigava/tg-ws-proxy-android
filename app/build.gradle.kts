@@ -23,8 +23,11 @@ android {
         applicationId = "io.github.derigava.tgwsproxy"
         minSdk = 24
         targetSdk = 35
-        versionCode = providers.gradleProperty("appVersionCode").orElse("1000").get().toInt()
-        versionName = providers.gradleProperty("appVersionName").orElse("1.0.0").get()
+        // versionCode follows the semantic version: major*10000 + minor*100 + patch.
+        // CI derives the same value, so the updater keeps working across version lines.
+        // 1.2.0 -> 10200, above every published build (1000 + CI run number, latest 1069).
+        versionCode = providers.gradleProperty("appVersionCode").orElse("10200").get().toInt()
+        versionName = providers.gradleProperty("appVersionName").orElse("1.2.0").get()
         buildConfigField("String", "CORE_VERSION", "\"$coreVersion\"")
         buildConfigField("boolean", "APP_UPDATES_ENABLED", providers.gradleProperty("appUpdatesEnabled").orElse("false").get())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

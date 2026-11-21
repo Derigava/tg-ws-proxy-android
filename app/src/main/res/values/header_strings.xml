@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="product_cursor" translatable="false">█</string>
-    <string name="footer_version">Version %1$s</string>
-    <string name="footer_licenses">Licenses: Android app and ByeByeDPI GPL-3.0; Flowseal MIT; fonts SIL OFL 1.1</string>
 </resources>

@@ -15,7 +15,7 @@
 
 <p align="center"><a href="#english">English</a></p>
 
-TG-WS Proxy — одно приложение с двумя независимыми модулями:
+ByeBye TGWS Proxy — одно приложение с двумя независимыми модулями:
 
 - **TG-WS** поднимает локальный MTProto-прокси, а Telegram подключается к нему как к обычному прокси. VPN для этого модуля не нужен.
 - **ByeByeDPI** — нативный обход DPI. По умолчанию работает как системный VPN для всего телефона, второй режим — локальный SOCKS5. Оба режима без root.
@@ -96,7 +96,7 @@ apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 
 В 1.1.0 был встроенный self-update, и Play Защита блокировала установку как «вредоносное приложение». Это ложная классификация: приложение не собирает данные и не имеет чувствительных разрешений. В текущей версии возможности установки APK удалены, а CI проверяет, что они не вернутся.
 
-Официальная сборка называется `TG WS Proxy`, сертификат подписи SHA-256:
+Официальная сборка называется `ByeBye TGWS Proxy`, сертификат подписи SHA-256:
 
 ```text
 6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
@@ -132,7 +132,7 @@ apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 
 Для проверки Play Защитой владелец репозитория может запустить этот workflow с `play_protect_recipient`. В поле передаётся сертификат получателя в PEM, закодированный в Base64. После тестов Actions подписывает ARM64 APK релизным ключом и сохраняет зашифрованный CMS-артефакт на сутки. Его можно расшифровать локально командой `openssl cms -decrypt -binary -inform DER -in play-protect-preview.der -recip recipient.pem -inkey recipient.key -out preview.apk`.
 
-Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, а CI берёт следующий свободный патч, например `1.1.0`, затем `1.1.1`. Для новой линейки достаточно поменять `VERSION`. Что изменилось, описано в [CHANGELOG.md](CHANGELOG.md). Раздел с номером версии попадает в начало текста релиза.
+Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, а CI берёт следующий свободный патч, например `1.1.0`, затем `1.1.1`. Для новой линейки достаточно поменять `VERSION`. `versionCode` выводится из имени сборки: `major*10000 + minor*100 + patch` (1.2.0 → 10200), поэтому каждая следующая сборка строго выше предыдущей. Что изменилось, описано в [CHANGELOG.md](CHANGELOG.md). Раздел с номером версии попадает в начало текста релиза.
 
 ## Сборка
 
@@ -176,7 +176,7 @@ python scripts/sync_upstream.py --check
 
 ## English
 
-TG-WS Proxy is one app with two independent modules:
+ByeBye TGWS Proxy is one app with two independent modules:
 
 - **TG-WS** runs a local MTProto proxy on your phone and Telegram connects to it as a normal proxy. This module needs no VPN. It uses the Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) with an Android AES library selection.
 - **ByeByeDPI** is the native DPI bypass from [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. It defaults to a device-wide system VPN; the second mode is a local SOCKS5 at `127.0.0.1:1080`. Neither mode needs root.

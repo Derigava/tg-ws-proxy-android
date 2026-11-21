@@ -22,7 +22,7 @@
 
 ## Как проверить официальную сборку
 
-Официальная сборка называется `TG WS Proxy`. Сертификат подписи SHA-256:
+Официальная сборка называется `ByeBye TGWS Proxy`. Сертификат подписи SHA-256:
 
 ```text
 6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
@@ -64,7 +64,7 @@ apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 Шаблон текста (английский):
 
 ```text
-App: TG WS Proxy (io.github.derigava.tgwsproxy), versionName <...>, versionCode <...>
+App: ByeBye TGWS Proxy (io.github.derigava.tgwsproxy), versionName <...>, versionCode <...>
 APK SHA-256: <...>
 Signing certificate SHA-256: 6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
 

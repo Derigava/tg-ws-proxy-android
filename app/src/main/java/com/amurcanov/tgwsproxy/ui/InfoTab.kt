@@ -47,6 +47,7 @@ private const val RepositoryUrl = "https://github.com/Derigava/tg-ws-proxy-andro
 private const val IssuesUrl = "$RepositoryUrl/issues"
 private const val AndroidBaseUrl = "https://github.com/amurcanov/tg-ws-proxy-android"
 private const val CoreUrl = "https://github.com/Flowseal/tg-ws-proxy"
+private const val DpiUpstreamUrl = "https://github.com/romanvht/ByeByeDPI"
 private const val ProxyReferenceUrl = "https://github.com/Flowseal/tg-ws-proxy/issues/389"
 
 @Composable
@@ -214,6 +215,12 @@ fun InfoTab(settingsStore: SettingsStore) {
                 onClick = { openUrlInBrowser(context, AndroidBaseUrl) }
             )
             ActionRow(
+                title = stringResource(R.string.dpi_upstream),
+                subtitle = stringResource(R.string.dpi_upstream_subtitle),
+                icon = R.drawable.ic_dt_integration,
+                onClick = { openUrlInBrowser(context, DpiUpstreamUrl) }
+            )
+            ActionRow(
                 title = stringResource(R.string.useful_material),
                 subtitle = stringResource(R.string.useful_material_subtitle),
                 icon = R.drawable.ic_dt_network,
@@ -222,11 +229,10 @@ fun InfoTab(settingsStore: SettingsStore) {
         }
 
         Spacer(Modifier.height(16.dp))
-        MonoLabel(stringResource(R.string.unofficial_notice))
-        Spacer(Modifier.height(16.dp))
-        MonoLabel(stringResource(R.string.footer_version, BuildConfig.VERSION_NAME))
-        MonoLabel(stringResource(R.string.footer_licenses))
         ProductByline()
+        Spacer(Modifier.height(16.dp))
+        // The disclaimer is the last element on this screen: keep it below everything else.
+        MonoLabel(stringResource(R.string.unofficial_notice))
     }
 
     pendingManualRelease?.let { release ->

@@ -1,5 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="footer_version">Версия %1$s</string>
-    <string name="footer_licenses">Лицензии: приложение Android и ByeByeDPI — GPL-3.0; Flowseal — MIT; шрифты — SIL OFL 1.1</string>
 </resources>

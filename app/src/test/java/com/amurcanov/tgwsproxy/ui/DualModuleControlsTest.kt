@@ -137,7 +137,7 @@ class DualModuleControlsTest {
     @Test
     fun commonHeaderNamesProductAndCreditsAuthor() {
         composeRule.setContent { TgWsProxyTheme { BrandHeader("Test") } }
-        composeRule.onNodeWithText("TG-WS Proxy").assertExists()
+        composeRule.onNodeWithText("ByeBye TGWS Proxy").assertExists()
         composeRule.onNodeWithText("by derigava_█").assertExists()
     }
 
