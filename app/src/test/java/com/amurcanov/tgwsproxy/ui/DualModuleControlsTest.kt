@@ -142,6 +142,24 @@ class DualModuleControlsTest {
     }
 
     @Test
+    fun dpadMovesBetweenServiceRowsAndActivatesFocusedSelection() {
+        var selection = com.amurcanov.tgwsproxy.ServiceSelection()
+        lateinit var inputMode: InputModeManager
+        composeRule.setContent {
+            inputMode = LocalInputModeManager.current
+            var current by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(selection) }
+            TgWsProxyTheme {
+                DualModuleControls(current, { current = it; selection = it }, CursorVisualState.Off, "Offline", "Start", {}, false, false, false, {})
+            }
+        }
+        composeRule.runOnIdle { inputMode.requestInputMode(InputMode.Keyboard) }
+        composeRule.onNodeWithText("Telegram").performSemanticsAction(SemanticsActions.RequestFocus)
+        composeRule.onNodeWithText("Telegram").assertIsFocused().performKeyInput { pressKey(Key.DirectionDown) }
+        composeRule.onNodeWithText("YouTube").assertIsFocused().performKeyInput { pressKey(Key.DirectionCenter) }
+        assertTrue(selection.telegram && selection.youtube && !selection.discord)
+    }
+
+    @Test
     fun selectingVpnServiceImmediatelyExplainsVpnSlotWithoutForeignVpn() {
         composeRule.setContent {
             var selection by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(com.amurcanov.tgwsproxy.ServiceSelection()) }
