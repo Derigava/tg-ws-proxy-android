@@ -32,6 +32,7 @@ internal fun DpiBackupActions() {
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<Int?>(null) }
     var confirmExport by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
 
     fun runOperation(uri: Uri?, success: Int, operation: (Uri) -> Unit) {
         if (uri == null || busy) return
@@ -77,10 +78,20 @@ internal fun DpiBackupActions() {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         BrandOutlineButton(stringResource(R.string.dpi_backup_import), { importDocument.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !busy)
         BrandOutlineButton(stringResource(R.string.dpi_backup_export), { confirmExport = true }, enabled = !busy)
-        BrandOutlineButton(stringResource(R.string.dpi_backup_reset), {
-            result = if (runCatching { store.resetSettings() }.isSuccess) R.string.dpi_backup_reset_done else R.string.dpi_backup_error
-        }, enabled = !busy)
+        BrandOutlineButton(stringResource(R.string.dpi_backup_reset), { confirmReset = true }, enabled = !busy)
         result?.let { Text(stringResource(it)) }
+    }
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text(stringResource(R.string.dpi_backup_reset)) },
+            text = { Text(stringResource(R.string.settings_v3_reset_confirm)) },
+            confirmButton = { TextButton(onClick = {
+                confirmReset = false
+                result = if (runCatching { store.resetSettings() }.isSuccess) R.string.dpi_backup_reset_done else R.string.dpi_backup_error
+            }) { Text(stringResource(R.string.dpi_backup_reset)) } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
     if (confirmExport) {
         AlertDialog(
