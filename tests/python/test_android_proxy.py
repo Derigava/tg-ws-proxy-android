@@ -71,6 +71,24 @@ class AdapterLifecycleTests(unittest.TestCase):
         self.addCleanup(self.refresh.stop)
         self.addCleanup(adapter.stop)
 
+    def test_hung_route_probe_does_not_block_stop_or_restart(self):
+        entered, release = threading.Event(), threading.Event()
+        def blocked_probe(*args, **kwargs):
+            entered.set()
+            release.wait(10)
+            return {"ok": False, "stage": "dns", "attempts": []}
+        settings = config(dc_ips="2:149.154.167.220")
+        try:
+            with (patch("route_probe.probe", side_effect=blocked_probe),
+                  patch.object(adapter, "STOP_TIMEOUT", 1)):
+                self.assertTrue(json.loads(adapter.start(json.dumps(settings)))["running"])
+                self.assertTrue(entered.wait(4))
+                self.assertEqual(json.loads(adapter.stop())["state"], "stopped")
+                self.assertTrue(json.loads(adapter.start(json.dumps(settings)))["running"])
+                self.assertEqual(json.loads(adapter.stop())["state"], "stopped")
+        finally:
+            release.set()
+
     def test_native_crypto_http2_and_ca_imports(self):
         result = json.loads(adapter.self_test())
         self.assertTrue(result["ok"])
