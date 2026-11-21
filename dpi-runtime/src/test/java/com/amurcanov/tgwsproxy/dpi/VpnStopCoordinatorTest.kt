@@ -6,7 +6,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VpnStopCoordinatorTest {
-    @Test fun hungNativeStopTriggersTerminationWithoutAcknowledging() {
+    @Test fun hungNativeStopTriggersTerminationOffCallerThread() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val killed = CountDownLatch(1)
