@@ -2,137 +2,240 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.png">
-    <img src="docs/assets/banner-dark.png" alt="TG WS Proxy: локальный MTProto-прокси для Telegram на Android">
+    <img src="docs/assets/banner-dark.png" width="100%" alt="ByeBye TGWS Proxy — локальный MTProto-прокси и DPI-bypass для Android">
   </picture>
 </p>
 
+<h1 align="center">ByeBye TGWS Proxy</h1>
+
+<p align="center"><b>Локальный MTProto-прокси и DPI-bypass в одном приложении</b></p>
+
 <p align="center">
   <a href="https://github.com/Derigava/tg-ws-proxy-android/releases/latest"><img alt="Последний релиз" src="https://img.shields.io/github/v/release/Derigava/tg-ws-proxy-android?style=flat-square&label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&color=65D9E8&labelColor=0B151B"></a>
-  <a href="https://github.com/Derigava/tg-ws-proxy-android/actions/workflows/android-release.yml"><img alt="Проверки" src="https://img.shields.io/github/actions/workflow/status/Derigava/tg-ws-proxy-android/android-release.yml?branch=main&style=flat-square&label=CI&labelColor=0B151B"></a>
+  <a href="https://github.com/Derigava/tg-ws-proxy-android/actions/workflows/android-release.yml"><img alt="Состояние CI" src="https://img.shields.io/github/actions/workflow/status/Derigava/tg-ws-proxy-android/android-release.yml?branch=main&style=flat-square&label=CI&labelColor=0B151B"></a>
   <a href="LICENSE"><img alt="Лицензия GPLv3" src="https://img.shields.io/badge/license-GPLv3-65D9E8?style=flat-square&labelColor=0B151B"></a>
   <img alt="Android 7.0+ ARM64" src="https://img.shields.io/badge/Android-7.0%2B%20ARM64-65D9E8?style=flat-square&labelColor=0B151B">
 </p>
 
-<p align="center"><a href="#english">English</a></p>
+<h3 align="center"><a href="https://github.com/Derigava/tg-ws-proxy-android/releases/latest">Скачать APK</a></h3>
 
-ByeBye TGWS Proxy — одно приложение с двумя независимыми модулями:
+<p align="center"><sub>Android 7.0+ · ARM64 · без root</sub></p>
 
-- **TG-WS** поднимает локальный MTProto-прокси, а Telegram подключается к нему как к обычному прокси. VPN для этого модуля не нужен.
-- **ByeByeDPI** — нативный обход DPI. По умолчанию работает как системный VPN для всего телефона, второй режим — локальный SOCKS5. Оба режима без root.
+<p align="center"><b>Русский</b> · <a href="README.en.md">English</a></p>
+
+## Быстрый старт
+
+1. Скачай `tgwsproxy-*-arm64.apk` со страницы [последнего релиза](https://github.com/Derigava/tg-ws-proxy-android/releases/latest). Нужны Android 7.0+ и ARM64.
+2. Установи APK. Если Android предупредит об установке из неизвестного источника, подтверди установку именно для этого файла.
+3. Открой приложение и разреши уведомления: они показывают состояние и дают кнопку остановки в шторке.
+4. Отметь сервисы и нажми кнопку питания: **Telegram** пойдёт через локальный MTProto-прокси, **YouTube** и **Discord** — через VPN ByeByeDPI. Для Telegram останется нажать «Применить в Telegram», для VPN Android один раз спросит согласие.
+
+Дальше — что именно делают модули, чем отличаются режимы и что делать, если запуск не удался.
+
+[Возможности](#возможности) · [Интерфейс](#интерфейс) · [Первый запуск](#первый-запуск) · [Cloudflare](#свой-cloudflare) · [Автоматизация](#управление-без-интерфейса) · [Диагностика](#диагностика) · [Прозрачность](#прозрачность-и-безопасность) · [Проверка APK](#проверка-apk) · [Сборка](#сборка)
+
+## Что это
+
+Одно приложение с двумя независимыми модулями. Оба работают на самом устройстве, без root: ничего не нужно прошивать, разблокировать загрузчик или ставить системные патчи.
+
+- **TG-WS** поднимает локальный MTProto-прокси для Telegram на `127.0.0.1:1443`. Клиент Telegram подключается к нему как к обычному прокси, а ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) `v1.11.4` держит соединение с датацентрами Telegram напрямую или через Cloudflare.
+- **ByeByeDPI** — модуль на основе [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. Он работает с DPI на уровне TCP/UDP: системным VPN для всего телефона или локальным SOCKS5-прокси, который настраивается в приложениях вручную.
 
 ```text
-Telegram → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
-Трафик приложений → VPN ByeByeDPI (или SOCKS5 127.0.0.1:1080) → интернет
+Telegram               → 127.0.0.1:1443 (MTProto) → ядро Flowseal → DC Telegram
+Остальные приложения   → VPN ByeByeDPI (или SOCKS5 127.0.0.1:1080) → интернет
 ```
 
-Ядро TG-WS — исходное Python-ядро [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) без изменений; нативная часть ByeByeDPI — [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2` с её зависимостями. Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
+Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android); история коммитов сохранена.
 
-| Запуск | Работает | Настройки | Логи |
-|:---:|:---:|:---:|:---:|
-| <img src="docs/assets/screens/off.png" width="200" alt="Прокси выключен"> | <img src="docs/assets/screens/on.png" width="200" alt="Прокси запущен"> | <img src="docs/assets/screens/settings.png" width="200" alt="Настройки"> | <img src="docs/assets/screens/logs.png" width="200" alt="Логи"> |
+## Зачем два модуля
 
-## Установка
+Это не два режима одного механизма, а два разных инструмента, и они не заменяют друг друга.
 
-1. Скачай `tgwsproxy-*-arm64.apk` из [последнего релиза](https://github.com/Derigava/tg-ws-proxy-android/releases/latest) и установи. Нужны Android 7.0+ и ARM64.
-2. Открой приложение и разреши уведомления, чтобы видеть состояние прокси и останавливать его из шторки. Параметры работы в фоне описаны в разделе [«Доступы»](#доступы).
-3. Нажми кнопку TG-WS со значком питания и дождись `[OK] ПОДКЛЮЧЕНО`.
-4. Нажми «Применить в Telegram» и подтверди подключение в клиенте. Если клиентов несколько, приложение спросит, какой открыть.
+**TG-WS** решает узкую задачу: дать Telegram маршрут до его датацентров, когда прямое подключение не работает. Он не перехватывает трафик телефона, не занимает VPN-слот и не влияет на другие приложения. Если провайдер режет соединения к DC Telegram, этот модуль пытается провести их через WebSocket и Cloudflare.
 
-Правая кнопка запускает ByeByeDPI: при первом включении Android спросит согласие на VPN, потом появится уведомление. Если уже работает другой VPN, приложение предложит заменить его (с явным подтверждением), перейти на SOCKS5 или отменить. SOCKS5 работает без VPN и занимает `127.0.0.1:1080`.
+**ByeByeDPI** решает общую задачу: усложнить DPI-системе распознавание трафика. Он полезен не только Telegram, но и другим приложениям, которые ломаются на фильтрации. Системный VPN-режим охватывает устройство целиком или выбранные приложения; режим SOCKS5 отдаёт локальный прокси, который нужно указать в настройках клиента.
 
-Для ручной настройки на главном экране есть адрес, порт, секрет и ссылка `tg://proxy`. После смены настроек перезапусти прокси.
+Вместе они работают потому, что не делят один ресурс. TG-WS слушает локальный порт, ByeByeDPI занимает VPN-слот или другой локальный порт. Приложение исключает само себя из собственного VPN-туннеля, поэтому трафик прокси не зацикливается. Оба модуля можно держать включёнными одновременно; помогает ли конкретная DPI-стратегия именно телеграмному маршруту — зависит от провайдера и проверяется только на устройстве.
+
+Подробная матрица соответствия функциям ByeByeDPI — в [docs/byebyedpi/parity.md](docs/byebyedpi/parity.md).
+
+## Возможности
+
+- **Локальный MTProto-прокси без VPN.** Ядро Flowseal `v1.11.4` без изменений, кроме выбора библиотеки AES для Android. Порт, адрес и 16-байтовый секрет видны на главном экране; ссылка `tg://proxy` и кнопка «Применить в Telegram» передают их клиенту, а при нескольких клиентах приложение спросит, какой открыть.
+- **Прямой маршрут и Cloudflare.** По умолчанию адреса DC задаются автоматически: сначала прямой WebSocket к DC2 и DC4, CF-маршрут — запасной. В «Свой Cloudflare» можно задать домены CF-прокси и домены своих Worker: ядро пробует их первыми, до CF-прокси и прямого подключения, даже при выключенном CloudFlare CDN.
+- **ByeByeDPI в двух режимах.** Системный VPN на всё устройство или локальный SOCKS5 на `127.0.0.1:1080`. Если активен другой VPN, приложение не отзывает его молча: предлагает замену с подтверждением, переход на SOCKS5 или отмену.
+- **Подбор стратегий и редактор desync.** Автоподбор проверяет стратегии по HTTPS-узлам (сайт, API, изображения YouTube) и показывает, сколько узлов доступно у каждой. Удачные стратегии сохраняются, закрепляются и применяются одной кнопкой; ручной редактор открывает параметры split, fake, OOB, TLS-записей и модификаторов хоста.
+- **Фильтр приложений и списки доменов.** Для VPN-режима — чёрный или белый список приложений, для обхода — собственные списки доменов. Настройки ByeByeDPI экспортируются в файл и импортируются обратно, включая историю стратегий и выбранные приложения.
+- **Журнал и отчёт.** Логи разделены по источнику: TG-WS и ByeByeDPI пишут отдельно. «Инфо → Собрать отчёт» собирает устройство, ABI, настройки и ошибки за 24 часа; секрет в отчёт не попадает. «Поделиться журналом» отдаёт файл, где секрет и домены воркеров замаскированы.
+
+## Интерфейс
+
+Главный экран — три сервиса и одна кнопка питания. Telegram помечен `ПРОКСИ`: его обслуживает TG-WS. YouTube и Discord помечены `VPN`: их обслуживает ByeByeDPI в выбранном режиме. Ниже — статус, «Применить в Telegram», «Сменить стратегию», «Не работает? Починить» и таблица с режимом, пулом, портом, секретом, версией и ядром. «Настройки → Расширенные» делятся на вкладки TG-WS и ByeByeDPI; внизу — «Логи» и «Инфо».
+
+<p align="center">
+  <img src="docs/assets/screens/01-two-modules.png" width="720" alt="Главный экран: Telegram обслуживает TG-WS, YouTube и Discord — ByeByeDPI">
+</p>
+<p align="center"><sub><b>Главный экран.</b> Telegram идёт через TG-WS, YouTube и Discord — через ByeByeDPI; одна кнопка запускает выбранные сервисы.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/02-tgws-live.png" width="720" alt="TG-WS подключён: кнопка применения прокси и строка tg://proxy">
+</p>
+<p align="center"><sub><b>TG-WS подключён.</b> Готовую ссылку <code>tg://proxy</code> можно применить в Telegram или скопировать. Параметры ссылки на снимке скрыты.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/03-dpi-vpn.png" width="720" alt="Настройки ByeByeDPI: выбор между VPN и SOCKS5, локальный адрес в диагностике">
+</p>
+<p align="center"><sub><b>ByeByeDPI.</b> VPN использует системный слот Android. SOCKS5 слушает на <code>127.0.0.1:1080</code>.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/04-both-live.png" width="720" alt="Оба модуля работают одновременно: Telegram через TG-WS, YouTube через VPN ByeByeDPI, Discord выключен">
+</p>
+<p align="center"><sub><b>Оба модуля.</b> На снимке Telegram подключён через TG-WS, YouTube через VPN ByeByeDPI. Discord выключен.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/05-strategy-test.png" width="720" alt="Помощник восстановления: прогон DPI-стратегий по HTTPS-узлам">
+</p>
+<p align="center"><sub><b>Помощник восстановления.</b> Прогон встроенных стратегий: сколько HTTPS-узлов доступно у каждой.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/06-cloudflare.png" width="720" alt="Cloudflare: CDN, режим без TLS, свои домены CF-прокси и Worker">
+</p>
+<p align="center"><sub><b>Cloudflare.</b> Поддержка Cloudflare CDN и собственных Workers.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/07-logs.png" width="720" alt="Журнал: вкладки TG-WS и ByeByeDPI, уровни INFO, ERROR, NULL">
+</p>
+<p align="center"><sub><b>Журнал.</b> Вкладки TG-WS и ByeByeDPI, уровни INFO/ERROR/NULL; секрет в строках заменён на <code>[secret redacted]</code>.</sub></p>
+
+<p align="center">
+  <img src="docs/assets/screens/08-dpi-settings.png" width="720" alt="Расширенные настройки ByeByeDPI: режим, фильтр приложений, аргументы, история стратегий">
+</p>
+<p align="center"><sub><b>Настройки ByeByeDPI.</b> Режим VPN или SOCKS5, фильтр приложений, аргументы ciadpi и история стратегий.</sub></p>
+
+## Первый запуск
+
+### TG-WS
+
+1. Отметь Telegram и нажми кнопку питания. Дождись `[OK] ПОДКЛЮЧЕНО`: статус появляется только после того, как локальный прокси действительно поднялся.
+2. Нажми «Применить в Telegram». Приложение передаст клиенту адрес, порт и секрет; при нескольких установленных клиентах оно спросит, какому передать данные.
+3. Если нужно настроить вручную, на главном экране есть адрес, порт, секрет и ссылка `tg://proxy`. После смены настроек перезапусти прокси.
+
+Порт по умолчанию — `1443`. Адрес `127.0.0.1` означает, что прокси доступен только на этом телефоне; `0.0.0.0` открывает его всей локальной сети, и это стоит делать осознанно.
+
+### ByeByeDPI
+
+**Режим VPN.** Отметь YouTube или Discord и нажми кнопку питания. Android покажет системный запрос на подключение VPN — без согласия туннель не поднимется. После согласия появится уведомление, а статус сменится на `[OK] ПОДКЛЮЧЕНО`. Если уже работает другой VPN, приложение предложит заменить его с явным подтверждением, перейти на SOCKS5 или отменить действие.
+
+**Режим SOCKS5.** «Настройки → Расширенные → ByeByeDPI → Режим → SOCKS5». Локальный прокси займёт `127.0.0.1:1080`, запускается тем же выбором сервиса и кнопкой питания. Порт нужно указать в настройках тех приложений, которые должны через него ходить. Это не VPN-соединение: трафик остальных приложений не меняется.
+
+**Стратегия.** Если соединения рвутся, открой «Не работает? Починить» → «01 · Проверка стратегий DPI», останови модуль и запусти проверку: приложение переберёт встроенные стратегии и покажет, сколько HTTPS-узлов доступно у каждой. Удачную стратегию можно применить и закрепить, чтобы она была в списке «Сменить стратегию». Подбор не гарантирует доступ к любому сайту у любого провайдера.
+
+## Требования
+
+| Что | Значение |
+|---|---|
+| Android | 7.0 (API 24) и выше |
+| Архитектура | ARM64 (`arm64-v8a`) для релизного APK; сборка `emulator` с `x86_64` нужна для тестов на эмуляторе и в релиз не попадает |
+| Root | Не нужен ни одному модулю |
+| VPN | Нужен только для режима VPN ByeByeDPI; TG-WS и SOCKS5 работают без него |
+| Сеть | Интернет; для Cloudflare — доступ к выбранным CF-доменам или своим Worker |
+
+## Доступы
+
+| Что | Зачем | Что будет без этого |
+|---|---|---|
+| Уведомления | Показывают, что модуль запущен, и дают кнопки перезапуска и остановки | Всё работает, но управлять из шторки нельзя |
+| Согласие на VPN (системный диалог) | Разрешает ByeByeDPI поднять VPN-туннель | Режим VPN не запустится; SOCKS5 и TG-WS работают |
+| Экономия заряда | При остановках с выключенным экраном открывает системный список оптимизации батареи | На части устройств Android может приостанавливать работу в фоне |
+| Автозапуск в прошивке | Xiaomi, Huawei, Honor, Oppo, realme, OnePlus, Vivo и Asus держат свой список. Строка появляется только на этих устройствах | Прошивка может завершить приложение; статус прочитать нельзя, проверяй вручную |
+
+Текущее состояние — в «Настройки → Доступы». На Samsung обычно достаточно отключить экономию заряда и проверить, что приложения нет в списке спящих.
+
+Разрешения в манифесте: `INTERNET`, `ACCESS_NETWORK_STATE`, `WAKE_LOCK`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` и `FOREGROUND_SERVICE_SYSTEM_EXEMPTED` для VPN-сервиса. Нет доступа к хранилищу, нет `QUERY_ALL_PACKAGES`: список приложений для фильтра читается через launcher-интент, а файлы настроек выбираются системным диалогом.
 
 ## Свой Cloudflare
 
 В «Настройки → Свой Cloudflare» два поля, оба принимают несколько доменов через запятую:
 
 - **Домены CF-прокси** заменяют общий список доменов. Работают при включённом CloudFlare CDN.
-- **CF Worker** — домены твоих [воркеров](https://github.com/Flowseal/tg-ws-proxy). Ядро пробует их первым, до CF-прокси и прямого подключения, даже при выключенном CloudFlare CDN. Свой воркер не делит квоту с другими пользователями.
+- **CF Worker** — домены твоих [воркеров](https://github.com/Flowseal/tg-ws-proxy). Ядро пробует их первыми, до CF-прокси и прямого подключения, даже при выключенном CloudFlare CDN.
 
-В отчёт для issue попадает только число воркеров, сами домены нет.
+В отчёт для issue попадает только число воркеров, сами домены — нет. Неверный домен подсвечивается прямо в поле.
 
 ## Управление без интерфейса
 
-Долгое нажатие на иконку даёт ярлыки «Запустить прокси» и «Остановить прокси». Их можно вынести на рабочий стол или повесить на жест. Есть ещё плитка в шторке. Приложения автоматизации (MacroDroid, Tasker) запускают активность `com.amurcanov.tgwsproxy.ProxyShortcutActivity` пакета `io.github.derigava.tgwsproxy` с действием:
+Долгое нажатие на иконку даёт ярлыки «Запустить прокси» и «Остановить прокси». Есть плитка в шторке. Приложения автоматизации (MacroDroid, Tasker) запускают активности пакета `io.github.derigava.tgwsproxy`:
 
 | Действие | Что делает |
 |---|---|
-| `io.github.derigava.tgwsproxy.action.START` | Запускает прокси с сохранёнными настройками |
-| `io.github.derigava.tgwsproxy.action.STOP` | Останавливает прокси |
-| `io.github.derigava.tgwsproxy.action.TOGGLE` | Переключает |
+| `io.github.derigava.tgwsproxy.action.START` | Запускает TG-WS с сохранёнными настройками |
+| `io.github.derigava.tgwsproxy.action.STOP` | Останавливает TG-WS |
+| `io.github.derigava.tgwsproxy.action.TOGGLE` | Переключает TG-WS |
+| `io.github.derigava.tgwsproxy.action.dpi.START` | Запускает ByeByeDPI в выбранном режиме |
+| `io.github.derigava.tgwsproxy.action.dpi.STOP` | Останавливает ByeByeDPI |
+| `io.github.derigava.tgwsproxy.action.dpi.TOGGLE` | Переключает ByeByeDPI |
 
-Запросы от приложений автоматизации требуют подтверждения на экране. Ярлыки рабочего стола и плитка применяют действие по нажатию.
+Активности для внешних действий — `com.amurcanov.tgwsproxy.ProxyShortcutActivity` и `com.amurcanov.tgwsproxy.DpiShortcutActivity`. Запросы от приложений автоматизации требуют подтверждения на экране: внешняя программа не может молча включить VPN или сменить стратегию. Ярлыки рабочего стола и плитка применяют действие по нажатию.
 
-## Доступы
+## Диагностика
 
-| Что | Зачем | Что будет без этого |
+- **Логи** — вкладка с разделением по источнику: журнал ядра TG-WS и журнал движка ByeByeDPI. Можно скопировать, очистить и отфильтровать по уровню.
+- **Собрать отчёт** — «Инфо → Собрать отчёт». В отчёт входят версия, Android, устройство, ABI, режим, порт, размер пула, число воркеров и ошибки за 24 часа. Секрета в нём нет.
+- **Поделиться журналом** — весь журнал файлом, для долгих отвалов. Секрет и домены воркеров замаскированы при записи.
+- **Диагностика ByeByeDPI** — адрес, режим, аргументы запуска, IPv6, фильтр приложений, списки доменов и резервные копии.
+
+## Техническая документация
+
+| Тема | Где |
+|---|---|
+| Паритет с ByeByeDPI 1.8.2: экран → действие → проверка | [docs/byebyedpi/parity.md](docs/byebyedpi/parity.md) |
+| Ворота выпуска: что должно быть проверено до публикации | [docs/byebyedpi/release-checklist.md](docs/byebyedpi/release-checklist.md) |
+| Play Protect, апелляция, проверка подписи | [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md) |
+| Разбор проблем с мобильным подключением | [docs/ISSUE_3_INVESTIGATION.md](docs/ISSUE_3_INVESTIGATION.md) |
+| Безопасность и сообщение об уязвимостях | [SECURITY.md](SECURITY.md) |
+| Лицензии, сторонние компоненты, бренд | [NOTICE.md](NOTICE.md) |
+| Что изменилось между версиями | [CHANGELOG.md](CHANGELOG.md) |
+| Зафиксированные версии ядер и хеши файлов | [upstream/flowseal.lock.json](upstream/flowseal.lock.json), [upstream/byebyedpi.lock.json](upstream/byebyedpi.lock.json) |
+
+Всё, что нужно при установке и первом запуске, есть в этом файле: [доступы](#доступы), [свой Cloudflare](#свой-cloudflare), [автоматизация](#управление-без-интерфейса), [диагностика](#диагностика), [проверка APK](#проверка-apk) и [сборка](#сборка).
+
+## Прозрачность и безопасность
+
+**Три разных режима — три разных свойства.**
+
+| Режим | Что делает | Чего не делает |
 |---|---|---|
-| Уведомления | Показывают, что прокси запущен, и дают кнопки перезапуска и остановки | Прокси работает, но управлять им из шторки нельзя |
-| Экономия заряда | При остановках прокси с выключенным экраном открывает системный список оптимизации батареи | На некоторых устройствах Android может приостанавливать прокси в фоне |
-| Автозапуск в прошивке | Xiaomi, Huawei, Honor, Oppo, realme, OnePlus, Vivo и Asus держат свой список. Строка появляется только на этих устройствах | Прошивка может завершить приложение. Статус прочитать нельзя, проверь вручную |
+| MTProto-прокси (TG-WS) | Принимает соединения Telegram-клиента на `127.0.0.1:1443` и ведёт их к DC Telegram напрямую или через Cloudflare/Worker | Не перехватывает трафик других приложений и не занимает VPN-слот |
+| SOCKS5 (ByeByeDPI) | Поднимает локальный прокси на `127.0.0.1:1080`; приложения ходят через него, если их так настроить | Не является VPN: приложения без настройки идут напрямую |
+| VPN (ByeByeDPI) | Поднимает локальный `VpnService`, через который идёт трафик устройства или выбранных приложений, и обрабатывает его DPI-движком | Не отправляет трафик на чужой сервер, не шифрует его дополнительно и не скрывает IP |
 
-Текущее состояние видно в разделе «Настройки → Доступы». На Samsung отключения экономии заряда обычно хватает, но проверь, что приложения нет в списке спящих.
+**Чего приложение не обещает.** ByeByeDPI не даёт анонимности и не заменяет VPN для приватности: он усложняет обнаружение трафика DPI-системой, но не шифрует соединения и не меняет IP. Подбор стратегии не гарантирует доступ к любому сайту у любого провайдера. Результат зависит от маршрута, DNS и оператора; если соединение висит, перезапусти модуль и сравни поведение с включённым и выключенным Cloudflare.
 
-## Обновления
+**Данные.** Аккаунтов, аналитики и телеметрии в приложении нет. Отчёт для issue содержит версию, устройство, ABI, настройки и ошибки; MTProto-секрет в него не попадает, домены воркеров заменяются на `worker#N`. Журнал пишется и в фоне, чтобы отчёт покрывал отвалы, случившиеся до открытия приложения. Оператор промежуточного узла — Cloudflare или твоего Worker — видит IP и параметры соединения; это свойство любого промежуточного маршрута.
 
-Приложение раз в 12 часов проверяет сведения о последнем релизе через WorkManager. Кнопка «Открыть релиз на GitHub» открывает страницу этого тега. Скачай APK со страницы релиза и установи его через Android. Android проверяет подпись при обновлении установленного пакета.
+**Обновления.** Приложение раз в 12 часов проверяет сведения о последнем релизе через WorkManager. Скачивания и установки внутри приложения нет: кнопка открывает страницу релиза в браузере, установку подтверждает Android. С 1.1.1 сборка не запрашивает `REQUEST_INSTALL_PACKAGES` и `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, а CI проверяет APK и падает, если эти возможности вернутся.
 
-Сертификат подписи, SHA-256:
+**Play Protect.** APK ставится вне Google Play, поэтому Play Защита проверяет его как приложение из интернета. В 1.1.0 встроенный self-update приводил к блокировке «вредоносное приложение»; возможность удалена. Если Play Защита блокирует официальную сборку: «Подробнее» → «Всё равно установить», если кнопка доступна; если её нет — пришли версию Android, имя APK, SHA-256 и источник файла. Не отключай Play Защиту целиком и не ставь APK из сторонних источников. Подробности и шаблон апелляции — в [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md).
+
+**Неофициальное приложение.** Проект не связан с Telegram. Telegram — товарный знак его владельца.
+
+## Проверка APK
+
+Официальная сборка называется `ByeBye TGWS Proxy`. Сертификат подписи, SHA-256:
 
 ```text
 6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
 ```
 
-Проверить скачанный файл и сравнить его хеш с `SHA256SUMS` в том же релизе:
+Скачай APK и `SHA256SUMS` из одного релиза и проверь файл и подпись:
 
 ```bash
 sha256sum -c SHA256SUMS
 apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
 ```
 
-## Play Protect и установка вне Google Play
-
-Приложение ставится APK, поэтому Play Защита проверяет его как приложение из интернета. Начиная с 1.1.1 сборка не запрашивает `REQUEST_INSTALL_PACKAGES` и `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, не скачивает и не устанавливает APK: кнопка обновления открывает страницу релиза в браузере, установку подтверждает Android.
-
-В 1.1.0 был встроенный self-update, и Play Защита блокировала установку как «вредоносное приложение». Это ложная классификация: приложение не собирает данные и не имеет чувствительных разрешений. В текущей версии возможности установки APK удалены, а CI проверяет, что они не вернутся.
-
-Официальная сборка называется `ByeBye TGWS Proxy`, сертификат подписи SHA-256:
-
-```text
-6b7e992f93bd0bfd8c9395ddf92d0e3684d236b0f29cdf637dfca80e20b60195
-```
-
-Проверить скачанный файл:
-
-```bash
-sha256sum -c SHA256SUMS
-apksigner verify --verbose --print-certs tgwsproxy-*-arm64.apk
-```
-
-Если Play Защита блокирует установку официальной сборки:
-
-- нажми «Подробнее» → «Всё равно установить», если кнопка доступна;
-- если кнопки нет, пришли версию Android, имя APK, SHA-256 и откуда скачан файл: это ложное срабатывание, его снимает [апелляция в Google](https://support.google.com/googleplay/android-developer/contact/protectappeals). Шаблон и подробности — в [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md);
-- не отключай Play Защиту целиком и не устанавливай APK из сторонних источников.
-
-Предупреждение «неизвестное приложение» для sideload-сборки — нормальное; оно не означает, что в APK есть вредоносный код.
-
-## Как выходят релизы
-
-В `upstream/flowseal.lock.json` записаны тег, коммит и SHA-256 всех файлов ядра. Единственная правка в снимке Flowseal выбирает встроенную библиотеку OpenSSL Chaquopy для AES на Android. GitHub Actions раз в сутки показывает доступный тег Flowseal. Чтобы обновить ядро, выполни `python scripts/sync_upstream.py --ref vX.Y.Z`, проверь изменения и внеси их в `main`.
-
-Для выпуска запусти workflow **Android checks and releases** на `main` с включённым `publish_release`. Он выполняет следующие шаги.
-
-1. Python-тесты ядра и адаптера.
-2. Сборка ARM64 APK и проверка нативных библиотек на страницы памяти 16 КБ.
-3. Запуск оптимизированного релиза на эмуляторах API 24 и API 35 с 16 КБ, затем инструментальные тесты.
-4. Сверка хеша проверенного APK, подпись прежним сертификатом и публикация. К публичному APK GitHub Actions добавляет аттестацию происхождения.
-
-Если что-то падает, релиз не выходит и рабочая версия остаётся на месте.
-
-Для проверки Play Защитой владелец репозитория может запустить этот workflow с `play_protect_recipient`. В поле передаётся сертификат получателя в PEM, закодированный в Base64. После тестов Actions подписывает ARM64 APK релизным ключом и сохраняет зашифрованный CMS-артефакт на сутки. Его можно расшифровать локально командой `openssl cms -decrypt -binary -inform DER -in play-protect-preview.der -recip recipient.pem -inkey recipient.key -out preview.apk`.
-
-Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, а CI берёт следующий свободный патч, например `1.1.0`, затем `1.1.1`. Для новой линейки достаточно поменять `VERSION`. `versionCode` выводится из имени сборки: `major*10000 + minor*100 + patch` (1.2.0 → 10200), поэтому каждая следующая сборка строго выше предыдущей. Что изменилось, описано в [CHANGELOG.md](CHANGELOG.md). Раздел с номером версии попадает в начало текста релиза.
+`apksigner` должен показать тот же отпечаток сертификата. Если хеш или сертификат не совпадают, файл не из этого репозитория — устанавливать его не нужно.
 
 ## Сборка
 
@@ -152,46 +255,30 @@ python scripts/run_python_tests.py
 python scripts/sync_upstream.py --check
 ```
 
-## Что важно знать
+## Как выходят релизы
 
-- Приложение неофициальное и не связано с Telegram.
-- Модуль TG-WS — это прокси для Telegram, а не системный VPN: другой трафик через него не идёт. Модуль ByeByeDPI по умолчанию обслуживает весь телефон через системный VPN или работает как локальный SOCKS5.
-- ByeByeDPI не обещает шифрование и не меняет твой IP: он усложняет обнаружение трафика DPI-системой. Подбор стратегии не гарантирует доступ к любому сайту у любого провайдера.
-- Прокси слушает `127.0.0.1`, поэтому доступен только на этом телефоне. Адрес `0.0.0.0` в настройках открывает его всей локальной сети.
-- При первом применении выбери клиент, которому передать адрес, порт и секрет. Приложение запоминает выбор вместе с подписью клиента.
-- Прокси подключается к Telegram и в зависимости от настроек использует твой Worker или общий Cloudflare-прокси. Оператор промежуточного узла может видеть IP и параметры соединения. Flowseal обновляет список общих доменов с GitHub.
-- Работа зависит от маршрута, DNS и провайдера. Если подключение висит, перезапусти прокси и сравни с включённым и выключенным Cloudflare.
-- При сбое переключения сети или пропаже интернета прокси сам сбрасывает накопленные задержки маршрутов, перезапуск не нужен.
-- Нашёл ошибку — приложи отчёт из «Инфо → Собрать отчёт», секрета в нём нет. В нём ошибки и события за 24 часа из журнала, который ведётся и в фоне. Для долгих отвалов приложи файл из «Инфо → Поделиться журналом»: секрет и домены воркеров в нём замаскированы. Об уязвимостях пиши по правилам из [SECURITY.md](SECURITY.md).
+В `upstream/*.lock.json` записаны теги, коммиты и SHA-256 файлов обоих ядер. GitHub Actions раз в сутки показывает доступный тег Flowseal; обновление ядра — `python scripts/sync_upstream.py --ref vX.Y.Z` с проверкой диффа.
+
+Выпуск запускается вручную: workflow **Android checks and releases** на `main` с включённым `publish_release`. Он прогоняет Python-тесты, собирает ARM64 APK и проверяет выравнивание нативных библиотек на страницах памяти 16 КБ, запускает релизную сборку на эмуляторах API 24, 25, 26 и API 35 (у последнего — 16 КБ страницы) и инструментальные тесты. Только после этого APK подписывается прежним сертификатом и публикуется; к файлу добавляется аттестация происхождения. Если что-то падает, релиз не выходит.
+
+Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, CI берёт следующий свободный патч. `versionCode` выводится из имени сборки (`major*10000 + minor*100 + patch`), поэтому каждая следующая сборка строго выше предыдущей.
+
+## Поддержка и участие
+
+- **Ошибка или вопрос** — [Issues](https://github.com/Derigava/tg-ws-proxy-android/issues). Приложи отчёт из «Инфо → Собрать отчёт»: в нём есть устройство, версия, настройки и ошибки, но нет секрета. Для долгих отвалов добавь файл из «Инфо → Поделиться журналом».
+- **Уязвимость** — не открывай публичный issue. Пиши через Security → Report a vulnerability, как описано в [SECURITY.md](SECURITY.md).
+- **Релизы и APK** — [Releases](https://github.com/Derigava/tg-ws-proxy-android/releases). Проверяй `SHA256SUMS` и сертификат.
+- **Ошибки протокола и ядра** относятся к [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy); особенности запуска на Android — сюда.
+- **Проверка на устройстве** — самый полезный вклад: матрица в [docs/byebyedpi/parity.md](docs/byebyedpi/parity.md) размечена по сценариям, и отчёт о реальном прогоне на телефоне закрывает пункт, который в CI не проверить.
 
 ## Лицензии и авторы
 
-- Android-приложение: [GPLv3](LICENSE). Проект основан на работе [amurcanov](https://github.com/amurcanov/tg-ws-proxy-android), история коммитов сохранена. Поскольку оригинальный репозиторий сейчас архивирован, я продолжаю развивать Android-реализацию, исправлять проблемы, описанные в Issues, и поддерживать совместимость с актуальным ядром Flowseal.
-- Ядро TG-WS: [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy).
-- Нативная часть ByeByeDPI: [GPL-3.0](upstream/byebyedpi/LICENSE), [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`; встроенные зависимости [hufrea/byedpi](https://github.com/hufrea/byedpi) (MIT), [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) (MIT), hev-socks5-core/hev-task-system/yaml (MIT), [lwip](https://savannah.nongnu.org/projects/lwip/) (BSD-3-Clause) и предустановленный wintun (WireGuard). Состав и лицензии закреплены в `upstream/byebyedpi.lock.json`.
-- Шрифты Unbounded, Onest и JetBrains Mono: [SIL OFL 1.1](licenses/fonts).
-- Знак `derigava_█` не передаётся вместе с кодом, подробности в [NOTICE.md](NOTICE.md).
+- **Android-приложение** — [GPLv3](LICENSE). Проект основан на работе [amurcanov](https://github.com/amurcanov/tg-ws-proxy-android), история коммитов сохранена. Оригинальный репозиторий архивирован, поэтому Android-реализация развивается здесь: исправления, совместимость с актуальным ядром Flowseal, второй модуль.
+- **Ядро TG-WS** — [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy) `v1.11.4`. В снимке одна правка: выбор встроенной библиотеки OpenSSL Chaquopy для AES на Android.
+- **Нативная часть ByeByeDPI** — [GPL-3.0](upstream/byebyedpi/LICENSE), [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. Встроенные зависимости: [hufrea/byedpi](https://github.com/hufrea/byedpi) (MIT), [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) (MIT), hev-socks5-core / hev-task-system / yaml (MIT), [lwip](https://savannah.nongnu.org/projects/lwip/) (BSD-3-Clause) и предустановленный wintun (WireGuard). Состав и лицензии закреплены в `upstream/byebyedpi.lock.json`.
+- **Шрифты** Unbounded, Onest и JetBrains Mono — [SIL OFL 1.1](licenses/fonts).
+- **Знак `derigava_█`** не передаётся вместе с кодом: GPLv3 не даёт прав на фирменные обозначения. Подробности — в [NOTICE.md](NOTICE.md).
 
 ---
 
-## English
-
-ByeBye TGWS Proxy is one app with two independent modules:
-
-- **TG-WS** runs a local MTProto proxy on your phone and Telegram connects to it as a normal proxy. This module needs no VPN. It uses the Python core of [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) with an Android AES library selection.
-- **ByeByeDPI** is the native DPI bypass from [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. It defaults to a device-wide system VPN; the second mode is a local SOCKS5 at `127.0.0.1:1080`. Neither mode needs root.
-
-The Android wrapper grew out of [amurcanov/tg-ws-proxy-android](https://github.com/amurcanov/tg-ws-proxy-android).
-
-1. Download `tgwsproxy-*-arm64.apk` from the [latest release](https://github.com/Derigava/tg-ws-proxy-android/releases/latest). It needs Android 7.0+ and ARM64.
-2. Open the app and allow notifications to see the status and stop it from the notification.
-3. Tap the TG-WS power button and wait for `[OK] CONNECTED`.
-4. Tap "Apply in Telegram", choose the client that will receive the proxy secret, and confirm in the client.
-
-The right button starts ByeByeDPI. On first run Android asks for VPN consent; then a notification appears. If another VPN is active, the app offers to replace it (with explicit confirmation), switch to SOCKS5, or cancel. ByeByeDPI does not promise encryption or hide your IP — it makes traffic harder for DPI systems to detect, and no strategy guarantees access to every site on every provider.
-
-Settings → Own Cloudflare takes your own CF proxy domains and Cloudflare Worker domains (comma-separated). Workers are tried first, even with CloudFlare CDN off. Long-press the app icon for Start/Stop shortcuts. Automation intents for `com.amurcanov.tgwsproxy.ProxyShortcutActivity` require confirmation.
-
-The app checks GitHub release metadata every 12 hours. Open the release page to download the APK and confirm installation in Android. The app is unofficial and independent of Telegram. Switch the language in Settings.
-
-Sideloaded builds may trigger Play Protect. Since 1.1.1 the app requests no install or battery-exemption permissions, never downloads or installs APKs, and only opens the GitHub release page. Verify the official APK with `SHA256SUMS` and the signing certificate above; see [docs/PLAY_PROTECT.md](docs/PLAY_PROTECT.md) if Play Protect blocks installation.
+<p align="center"><a href="README.en.md">English version</a></p>

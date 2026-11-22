@@ -1,0 +1,11 @@
+Шрифты в этой папке — из фирменной системы Derigava (00 Основа/assets/fonts).
+
+Unbounded-Variable.ttf      Unbounded, 200–900, заголовки. SIL Open Font License 1.1.
+Onest-Variable.ttf          Onest, 100–900, основной текст. SIL Open Font License 1.1.
+JetBrainsMono-Regular.ttf   JetBrains Mono 400, метрики и лейблы. SIL Open Font License 1.1.
+JetBrainsMono-Medium.ttf    JetBrains Mono 500, акцентные лейблы. SIL Open Font License 1.1.
+
+Полные тексты лицензий: Unbounded-OFL.txt, Onest-OFL.txt, JetBrainsMono-OFL.txt.
+Шрифты подключены через @font-face в style.css как локальные файлы и не устанавливаются
+в систему. При публикации макетов на сторонних площадках OFL-файлы должны ехать вместе
+со шрифтами.
