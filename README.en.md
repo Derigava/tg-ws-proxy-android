@@ -19,7 +19,7 @@
 
 <h3 align="center"><a href="https://github.com/Derigava/tg-ws-proxy-android/releases/latest">Download the APK</a></h3>
 
-<p align="center"><sub>Android 7.0+ · ARM64 · version 1.2.0 · no root</sub></p>
+<p align="center"><sub>Android 7.0+ · ARM64 · no root</sub></p>
 
 <p align="center"><a href="README.md">Русский</a> · <b>English</b></p>
 
@@ -76,44 +76,44 @@ The app interface is Russian-only for now, so the screenshots show Russian label
 The main screen holds three services and one power button. Telegram carries the `ПРОКСИ` (proxy) tag and is served by TG-WS. YouTube and Discord carry the `VPN` tag and are served by ByeByeDPI in the selected mode. Below sit the status, "Apply in Telegram", "Change strategy", "Not working? Fix it", and a table with mode, pool, port, secret, version and core. "Settings → Advanced" is split into TG-WS and ByeByeDPI tabs; Logs and Info are at the bottom.
 
 <p align="center">
-  <img src="docs/assets/screens/01-two-modules.png" width="480" alt="Main screen: Telegram served by TG-WS, YouTube and Discord by ByeByeDPI">
+  <img src="docs/assets/screens/01-two-modules.png" width="720" alt="Main screen: Telegram served by TG-WS, YouTube and Discord by ByeByeDPI">
 </p>
 <p align="center"><sub><b>Main screen.</b> Telegram goes through TG-WS, YouTube and Discord through ByeByeDPI; one button starts the selected services.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/02-tgws-live.png" width="480" alt="TG-WS connected: status, port 1443, secret and tg://proxy link">
+  <img src="docs/assets/screens/02-tgws-live.png" width="720" alt="TG-WS connected: Apply in Telegram button and tg://proxy link">
 </p>
-<p align="center"><sub><b>TG-WS connected.</b> Status <code>[OK] ПОДКЛЮЧЕНО</code>, port 1443, the secret and a ready <code>tg://proxy</code> link.</sub></p>
+<p align="center"><sub><b>TG-WS connected.</b> Apply the <code>tg://proxy</code> link in Telegram or copy it. The screenshot masks its parameters.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/03-dpi-vpn.png" width="480" alt="ByeByeDPI in VPN mode: YouTube selected, the VPN slot is taken">
+  <img src="docs/assets/screens/03-dpi-vpn.png" width="720" alt="ByeByeDPI settings: VPN and SOCKS5 modes, local address in diagnostics">
 </p>
-<p align="center"><sub><b>ByeByeDPI, VPN mode.</b> YouTube is selected; the app warns that the Android VPN slot is in use.</sub></p>
+<p align="center"><sub><b>ByeByeDPI.</b> VPN uses the Android VPN slot. SOCKS5 listens on <code>127.0.0.1:1080</code>.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/04-both-live.png" width="480" alt="Both modules running: Telegram and YouTube selected together">
+  <img src="docs/assets/screens/04-both-live.png" width="720" alt="Both modules running: Telegram through TG-WS, YouTube through the ByeByeDPI VPN, Discord unchecked">
 </p>
-<p align="center"><sub><b>Both at once.</b> Telegram and YouTube selected together: proxy and VPN run at the same time.</sub></p>
+<p align="center"><sub><b>Both at once.</b> Telegram through TG-WS, YouTube through the ByeByeDPI VPN, Discord unchecked: proxy and VPN run at the same time.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/05-strategy-test.png" width="480" alt="Recovery helper: a DPI strategy run against HTTPS endpoints">
+  <img src="docs/assets/screens/05-strategy-test.png" width="720" alt="Recovery helper: a DPI strategy run against HTTPS endpoints">
 </p>
 <p align="center"><sub><b>Recovery helper.</b> A run over the built-in strategies: how many HTTPS endpoints each one reaches.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/06-cloudflare.png" width="480" alt="Cloudflare: CDN, no-TLS mode, own CF proxy and Worker domains">
+  <img src="docs/assets/screens/06-cloudflare.png" width="720" alt="Cloudflare: CDN, no-TLS mode, own CF proxy and Worker domains">
 </p>
-<p align="center"><sub><b>Own Cloudflare.</b> CDN on, with your own CF proxy domains and a Worker domain.</sub></p>
+<p align="center"><sub><b>Cloudflare.</b> Supports Cloudflare CDN and custom Workers.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/07-logs.png" width="480" alt="Logs: TG-WS and ByeByeDPI tabs, INFO, ERROR and NULL levels">
+  <img src="docs/assets/screens/07-logs.png" width="720" alt="Logs: TG-WS and ByeByeDPI tabs, INFO, ERROR and NULL levels">
 </p>
 <p align="center"><sub><b>Logs.</b> TG-WS and ByeByeDPI tabs, INFO/ERROR/NULL levels; the secret is replaced with <code>[secret redacted]</code>.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/08-dpi-settings.png" width="480" alt="ByeByeDPI advanced settings: mode, app filter, arguments, strategy history">
+  <img src="docs/assets/screens/08-dpi-settings.png" width="720" alt="ByeByeDPI advanced settings: mode, app filter, arguments, strategy history">
 </p>
-<p align="center"><sub><b>ByeByeDPI settings.</b> VPN or SOCKS5 mode, app filter, ciadpi arguments and strategy history.</sub></p>
+<p align="center"><sub><b>ByeByeDPI.</b> VPN uses the Android VPN slot. SOCKS5 listens on <code>127.0.0.1:1080</code>.</sub></p>
 
 ## First run
 
@@ -263,7 +263,7 @@ python scripts/sync_upstream.py --check
 
 A release is started by hand: the **Android checks and releases** workflow on `main` with `publish_release` enabled. It runs the Python tests, builds the ARM64 APK and checks native library alignment for 16 KB memory pages, runs the release build on API 24, 25, 26 and API 35 emulators (16 KB pages on 35) plus instrumented tests. Only then is the APK signed with the existing certificate and published, with provenance attestation attached. If anything fails, no release is published.
 
-Versioning: `VERSION` holds the `MAJOR.MINOR` line and CI picks the next free patch. `versionCode` is derived from the name (`major*10000 + minor*100 + patch`, 1.2.0 → 10200), so every build is strictly above the previous one.
+Versioning: `VERSION` holds the `MAJOR.MINOR` line and CI picks the next free patch. `versionCode` is derived from the name (`major*10000 + minor*100 + patch`), so every build is strictly above the previous one.
 
 ## Support and contributing
 

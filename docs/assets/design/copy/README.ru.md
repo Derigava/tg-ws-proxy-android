@@ -19,7 +19,7 @@
 
 <h3 align="center"><a href="https://github.com/Derigava/tg-ws-proxy-android/releases/latest">Скачать APK</a></h3>
 
-<p align="center"><sub>Android 7.0+ · ARM64 · версия 1.2.0 · без root</sub></p>
+<p align="center"><sub>Android 7.0+ · ARM64 · без root</sub></p>
 
 <p align="center"><b>Русский</b> · <a href="README.en.md">English</a></p>
 
@@ -72,42 +72,42 @@ Android-обвязка выросла из [amurcanov/tg-ws-proxy-android](https
 Главный экран — три сервиса и одна кнопка питания. Telegram помечен `ПРОКСИ`: его обслуживает TG-WS. YouTube и Discord помечены `VPN`: их обслуживает ByeByeDPI в выбранном режиме. Ниже — статус, «Применить в Telegram», «Сменить стратегию», «Не работает? Починить» и таблица с режимом, пулом, портом, секретом, версией и ядром. «Настройки → Расширенные» делятся на вкладки TG-WS и ByeByeDPI; внизу — «Логи» и «Инфо».
 
 <p align="center">
-  <img src="docs/assets/screens/01-two-modules.png" width="300" alt="Главный экран: Telegram обслуживает TG-WS, YouTube и Discord — ByeByeDPI">
+  <img src="docs/assets/screens/01-two-modules.png" width="720" alt="Главный экран: Telegram обслуживает TG-WS, YouTube и Discord — ByeByeDPI">
 </p>
 <p align="center"><sub><b>Главный экран.</b> Telegram идёт через TG-WS, YouTube и Discord — через ByeByeDPI; одна кнопка запускает выбранные сервисы.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/02-tgws-live.png" width="300" alt="TG-WS подключён: статус, порт 1443, секрет и ссылка tg://proxy">
+  <img src="docs/assets/screens/02-tgws-live.png" width="720" alt="TG-WS подключён: кнопка применения прокси и строка tg://proxy">
 </p>
-<p align="center"><sub><b>TG-WS подключён.</b> Статус <code>[OK] ПОДКЛЮЧЕНО</code>, порт 1443, секрет и готовая ссылка <code>tg://proxy</code>.</sub></p>
+<p align="center"><sub><b>TG-WS подключён.</b> Готовую ссылку <code>tg://proxy</code> можно применить в Telegram или скопировать. Параметры ссылки на снимке скрыты.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/03-dpi-vpn.png" width="300" alt="ByeByeDPI в режиме VPN: выбран YouTube, VPN-слот занят">
+  <img src="docs/assets/screens/03-dpi-vpn.png" width="720" alt="Настройки ByeByeDPI: выбор между VPN и SOCKS5, локальный адрес в диагностике">
 </p>
-<p align="center"><sub><b>ByeByeDPI, режим VPN.</b> Выбран YouTube; приложение предупреждает, что VPN-слот Android занят.</sub></p>
+<p align="center"><sub><b>ByeByeDPI.</b> VPN использует системный слот Android. SOCKS5 слушает на <code>127.0.0.1:1080</code>.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/04-both-live.png" width="300" alt="Оба модуля работают одновременно: Telegram и YouTube выбраны вместе">
+  <img src="docs/assets/screens/04-both-live.png" width="720" alt="Оба модуля работают одновременно: Telegram через TG-WS, YouTube через VPN ByeByeDPI, Discord выключен">
 </p>
-<p align="center"><sub><b>Оба модуля сразу.</b> Telegram и YouTube выбраны вместе: прокси и VPN работают одновременно.</sub></p>
+<p align="center"><sub><b>Оба модуля.</b> На снимке Telegram подключён через TG-WS, YouTube через VPN ByeByeDPI. Discord выключен.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/05-strategy-test.png" width="300" alt="Помощник восстановления: прогон DPI-стратегий по HTTPS-узлам">
+  <img src="docs/assets/screens/05-strategy-test.png" width="720" alt="Помощник восстановления: прогон DPI-стратегий по HTTPS-узлам">
 </p>
 <p align="center"><sub><b>Помощник восстановления.</b> Прогон встроенных стратегий: сколько HTTPS-узлов доступно у каждой.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/06-cloudflare.png" width="300" alt="Cloudflare: CDN, режим без TLS, свои домены CF-прокси и Worker">
+  <img src="docs/assets/screens/06-cloudflare.png" width="720" alt="Cloudflare: CDN, режим без TLS, свои домены CF-прокси и Worker">
 </p>
-<p align="center"><sub><b>Свой Cloudflare.</b> CDN включён, заданы свои домены CF-прокси и домен Worker.</sub></p>
+<p align="center"><sub><b>Cloudflare.</b> Поддержка Cloudflare CDN и собственных Workers.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/07-logs.png" width="300" alt="Журнал: вкладки TG-WS и ByeByeDPI, уровни INFO, ERROR, NULL">
+  <img src="docs/assets/screens/07-logs.png" width="720" alt="Журнал: вкладки TG-WS и ByeByeDPI, уровни INFO, ERROR, NULL">
 </p>
 <p align="center"><sub><b>Журнал.</b> Вкладки TG-WS и ByeByeDPI, уровни INFO/ERROR/NULL; секрет в строках заменён на <code>[secret redacted]</code>.</sub></p>
 
 <p align="center">
-  <img src="docs/assets/screens/08-dpi-settings.png" width="300" alt="Расширенные настройки ByeByeDPI: режим, фильтр приложений, аргументы, история стратегий">
+  <img src="docs/assets/screens/08-dpi-settings.png" width="720" alt="Расширенные настройки ByeByeDPI: режим, фильтр приложений, аргументы, история стратегий">
 </p>
 <p align="center"><sub><b>Настройки ByeByeDPI.</b> Режим VPN или SOCKS5, фильтр приложений, аргументы ciadpi и история стратегий.</sub></p>
 
@@ -259,7 +259,7 @@ python scripts/sync_upstream.py --check
 
 Выпуск запускается вручную: workflow **Android checks and releases** на `main` с включённым `publish_release`. Он прогоняет Python-тесты, собирает ARM64 APK и проверяет выравнивание нативных библиотек на страницах памяти 16 КБ, запускает релизную сборку на эмуляторах API 24, 25, 26 и API 35 (у последнего — 16 КБ страницы) и инструментальные тесты. Только после этого APK подписывается прежним сертификатом и публикуется; к файлу добавляется аттестация происхождения. Если что-то падает, релиз не выходит.
 
-Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, CI берёт следующий свободный патч. `versionCode` выводится из имени сборки (`major*10000 + minor*100 + patch`, 1.2.0 → 10200), поэтому каждая следующая сборка строго выше предыдущей.
+Номер версии: в `VERSION` лежит линейка `MAJOR.MINOR`, CI берёт следующий свободный патч. `versionCode` выводится из имени сборки (`major*10000 + minor*100 + patch`), поэтому каждая следующая сборка строго выше предыдущей.
 
 ## Поддержка и участие
 
