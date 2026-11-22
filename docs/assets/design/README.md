@@ -52,7 +52,7 @@ python -c "from PIL import Image; [Image.open(p).save(p, optimize=True) for p in
 ## Шрифты и логотипы
 
 - **Unbounded** 600 — название. **Onest** 400 — подзаголовок и описания модулей.
-  **JetBrains Mono** 400/500 — лейблы, статусы, факты, версия.
+  **JetBrains Mono** 400/500 — лейблы, статусы и характеристики.
 - Файлы: `assets/fonts/`, лицензии OFL рядом, сводка — `assets/fonts/fonts.txt`.
 - Логотипы: `assets/logos/` — `mark-dark-color.svg`, `mark-light-color.svg`,
   `wordmark-dark-color.svg`, `wordmark-light-color.svg`. Знак не перерисовывается и
@@ -84,7 +84,7 @@ python -c "from PIL import Image; [Image.open(p).save(p, optimize=True) for p in
   `assets/fonts/`.
 - `social-preview.png` рассчитан на рекомендацию GitHub 1280 × 640; при загрузке в
   настройках репозитория GitHub может кадрировать края под 2:1 в некоторых местах.
-- Модули описаны по фактическому поведению 1.2.0: TG-WS — локальный MTProto-прокси на
+- Модули описаны по поведению приложения: TG-WS — локальный MTProto-прокси на
   `127.0.0.1:1443` через Cloudflare CDN; ByeByeDPI — DPI-bypass без root, системный
   VPN-режим или локальный SOCKS5. Формулировки «VPN для анонимности», «шифрование»,
   «скрытие IP» и «официальный клиент Telegram» не используются.

@@ -1,37 +1,25 @@
 # Презентационные экраны
 
-Исходники композиций для витрины приложения. Собираются из реальных снимков
-`docs/assets/screenshots/`, ничего не дорисовывается: только рамка устройства,
-подписи и фон.
+Карточки собраны из фрагментов снимков приложения. Подписи, фон и рамки
+редактируются в HTML и `../styles/screens.css`. Фрагменты PNG лежат в
+`../assets/crops/`, исходные снимки — в `../../screenshots/`.
 
-## Состав
-
-| Файл | Источник | Блок под подписью |
-|---|---|---|
-| `01-two-modules.html` | `raw/01-home-off.png` | схема TG-WS / ByeByeDPI → приложения |
-| `02-tgws-live.html` | `raw/02-tgws-active.png` + кроп `extras/extra-01` | строка `tg://proxy` |
-| `03-dpi-vpn.html` | `raw/03-dpi-active.png` | таблица режима |
-| `04-both-live.html` | `raw/04-both-active.png` | статусы обоих модулей |
-| `05-strategy-test.html` | `raw/05-dpi-strategies.png` | 61/61 и 2/3 |
-| `06-cloudflare.html` | `raw/07-cloudflare.png` | таблица CF |
-| `07-logs.html` | `raw/08-logs.png` | три строки журнала |
-| `08-dpi-settings.html` | `raw/06-dpi-settings.png` | таблица настроек |
-
-## Сборка
+| Карточка | Снимки |
+|---|---|
+| 01 · Два модуля | `raw/01-home-off.png`, `raw/06-dpi-settings.png` |
+| 02 · TG-WS | `raw/02-tgws-active.png`, `extras/extra-01-home-proxy-link.png` |
+| 03 · VPN и SOCKS5 | `raw/06-dpi-settings.png`, `extras/extra-02-dpi-diagnostics.png` |
+| 04 · Два модуля в работе | `raw/04-both-active.png` |
+| 05 · Автоподбор | `raw/05-dpi-strategies.png` |
+| 06 · Cloudflare | `raw/07-cloudflare.png` |
+| 07 · Логи | `raw/08-logs.png` |
+| 08 · Настройки ByeByeDPI | `raw/06-dpi-settings.png` |
 
 ```sh
-python docs/assets/design/screens/render.py            # все
-python docs/assets/design/screens/render.py 05 06      # выборочно
+python docs/assets/design/screens/render.py
+python docs/assets/design/screens/render.py 05 06
 ```
 
-Chrome headless рендерит 1600×1100 при `device-scale-factor=1`, скрипт проверяет
-ширину, высоту и вес каждого PNG. Результат — `docs/assets/screens/*.png`.
-
-## Общие правила
-
-- Сетка: поля 80 px, колонка текста 880 px, телефон 386×826, шапка 42 px,
-  нижний блок прижат к базовой линии 960 px.
-- Шрифты: Unbounded 600 — заголовок 56 px, Onest 400 — пояснение 26 px,
-  JetBrains Mono — лейблы и значения. Файлы в `../assets/fonts`.
-- Цвета: `#0B151B` фон, `#EDF5F7` текст, `#A4B7C0` вторичный, `#65D9E8` акцент.
-- Снимок вставляется как 360×800 — это ровно 1080×2400, без растяжения.
+Chrome headless сохраняет карточки 1600 × 1100 в `docs/assets/screens/`.
+При обновлении снимков скрой секрет и параметры ссылки `tg://proxy` перед
+публикацией исходных кадров, фрагментов и контактного листа.
