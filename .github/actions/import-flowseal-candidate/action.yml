@@ -1,0 +1,40 @@
+name: Import scoped Flowseal candidate
+description: Import the source snapshot without running candidate code
+inputs:
+  revision:
+    description: Exact commit from the snapshot job
+    required: true
+  checkout:
+    description: Check out the candidate in a read-only build job
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      with:
+        name: flowseal-candidate
+        path: ${{ runner.temp }}/flowseal-candidate
+    - name: Verify commit, parent, and file scope
+      shell: bash
+      env:
+        REVISION: ${{ inputs.revision }}
+        CHECKOUT_CANDIDATE: ${{ inputs.checkout }}
+      run: |
+        [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]]
+        git fetch --no-tags "$RUNNER_TEMP/flowseal-candidate/flowseal.bundle" HEAD
+        test "$(git rev-parse FETCH_HEAD)" = "$REVISION"
+        test "$(git rev-list --parents -n 1 "$REVISION")" = "$REVISION $GITHUB_SHA"
+        python3 - "$GITHUB_SHA" "$REVISION" <<'PY'
+        import subprocess
+        import sys
+
+        paths = subprocess.check_output([
+            'git', 'diff', '--no-renames', '--name-only', '-z', *sys.argv[1:], '--',
+        ]).split(b'\0')[:-1]
+        lock = b'upstream/flowseal.lock.json'
+        if lock not in paths or any(path != lock and not path.startswith(b'upstream/flowseal/') for path in paths):
+            raise SystemExit('Flowseal candidate changed files outside the permitted source scope or lacks a lock update')
+        PY
+        if [[ "$CHECKOUT_CANDIDATE" == true ]]; then
+          git -c core.hooksPath=/dev/null checkout --detach "$REVISION"
+        fi

@@ -19,3 +19,23 @@ def test_moved_locked_tag_rejected_before_archive_or_writes(tmp_path):
             sync.sync('v1.2.3')
     assert fetch.call_count == 1
     assert json.loads(lock.read_text())['commit'] == 'a' * 40
+
+
+@pytest.mark.parametrize(('latest', 'draft', 'prerelease', 'expected'), [
+    ('v1.12.0', False, False, 'v1.12.0'),
+    ('v1.11.4', False, False, None),
+    ('1.11.4.0', False, False, None),
+    ('v1.9.9', False, False, None),
+    ('v1.12.0', True, False, None),
+    ('v1.12.0', False, True, None),
+])
+def test_plan_only_selects_a_newer_published_stable_release(latest, draft, prerelease, expected):
+    lock = {'tag': 'v1.11.4', 'commit': 'a' * 40}
+    release = {'tag_name': latest, 'draft': draft, 'prerelease': prerelease}
+    assert sync.plan_update(lock, lock['commit'], release) == expected
+
+
+def test_plan_rejects_moved_pin_even_if_a_newer_tag_exists():
+    with pytest.raises(ValueError, match='Locked Flowseal tag.*moved'):
+        sync.plan_update({'tag': 'v1.11.4', 'commit': 'a' * 40}, 'b' * 40,
+                         {'tag_name': 'v1.12.0', 'draft': False, 'prerelease': False})

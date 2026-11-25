@@ -38,7 +38,7 @@ The rest of this page explains what the modules do, how the modes differ, and wh
 
 One app with two independent modules. Both run on the device itself, without root: no flashing, no unlocked bootloader, no system patches.
 
-- **TG-WS** runs a local MTProto proxy for Telegram on `127.0.0.1:1443`. The Telegram client connects to it like to any proxy, and the [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) `v1.11.4` core reaches Telegram data centres directly or through Cloudflare.
+- **TG-WS** runs a local MTProto proxy for Telegram on `127.0.0.1:1443`. The Telegram client connects to it like to any proxy, and the [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) core reaches Telegram data centres directly or through Cloudflare.
 - **ByeByeDPI** is built on [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. It works against DPI at the TCP/UDP level: either as a system VPN for the whole phone or as a local SOCKS5 proxy that you configure in apps by hand.
 
 ```text
@@ -62,7 +62,7 @@ The full feature-by-feature comparison with ByeByeDPI is in [docs/byebyedpi/pari
 
 ## Features
 
-- **A local MTProto proxy with no VPN.** The Flowseal `v1.11.4` core is unmodified apart from selecting the bundled Chaquopy OpenSSL build for AES on Android. Address, port and the 16-byte secret are on the main screen; a `tg://proxy` link and the "Apply in Telegram" button hand them to the client, and with several clients installed the app asks which one to open.
+- **A local MTProto proxy with no VPN.** The Flowseal core is unmodified apart from selecting the bundled Chaquopy OpenSSL build for AES on Android. Address, port and the 16-byte secret are on the main screen; a `tg://proxy` link and the "Apply in Telegram" button hand them to the client, and with several clients installed the app asks which one to open.
 - **Direct route and Cloudflare.** DC addresses are automatic by default: a direct WebSocket to DC2 and DC4 first, the CF route as fallback. Under "Own Cloudflare" you can set CF proxy domains and your own Worker domains: the core tries them first, before CF proxies and the direct connection, even with CloudFlare CDN off.
 - **ByeByeDPI in two modes.** A system VPN for the whole device, or a local SOCKS5 proxy on `127.0.0.1:1080`. If another VPN is active, the app never drops it silently: it offers a confirmed replacement, a switch to SOCKS5, or cancel.
 - **Strategy search and a desync editor.** The search tests strategies against HTTPS endpoints (site, API, YouTube images) and reports how many are reachable with each one. Good strategies are saved, pinned and applied with one tap; the manual editor exposes split, fake, OOB, TLS-record and host-modifier parameters.
@@ -259,9 +259,11 @@ python scripts/sync_upstream.py --check
 
 ## How releases are made
 
-`upstream/*.lock.json` records tags, commits and SHA-256 for every file of both cores. GitHub Actions reports the available Flowseal tag once a day; updating the core is `python scripts/sync_upstream.py --ref vX.Y.Z` followed by a diff review.
+`upstream/*.lock.json` records tags, commits and SHA-256 for every file of both cores. **Android checks and releases** checks daily for a newer stable Flowseal release. Set `update_flowseal=true` to run it without waiting: on `main` it can publish; on any other branch it only verifies the candidate, without writing to the repository or publishing. If upstream is unchanged or older, no APK is built or published.
 
-A release is started by hand: the **Android checks and releases** workflow on `main` with `publish_release` enabled. It runs the Python tests, builds the ARM64 APK and checks native library alignment for 16 KB memory pages, runs the release build on API 24, 25, 26 and API 35 emulators (16 KB pages on 35) plus instrumented tests. Only then is the APK signed with the existing certificate and published, with provenance attestation attached. If anything fails, no release is published.
+The candidate runs through the existing Python, JVM, APK and emulator checks on API 24, 25, 26 and 35 (16 KB), with no access to production signing keys. If they pass, CI fast-forwards `main` to the tested commit and explicitly dispatches a release for that revision. The release repeats the checks from committed sources, increments the app's patch version, then signs the verified APK in a separate job and attaches provenance. On failure, CI files one issue per upstream tag with the failed step and logs; the published APK is unchanged.
+
+To release an already committed core (for example after a manual update via PR), run the same workflow on `main` with `publish_release=true`. If the automatic release fails after `main` was updated, rerun the failed workflow or check the issue and release the current `main` manually.
 
 Versioning: `VERSION` holds the `MAJOR.MINOR` line and CI picks the next free patch. `versionCode` is derived from the name (`major*10000 + minor*100 + patch`), so every build is strictly above the previous one.
 
@@ -276,7 +278,7 @@ Versioning: `VERSION` holds the `MAJOR.MINOR` line and CI picks the next free pa
 ## Licences and authors
 
 - **Android app** — [GPLv3](LICENSE). Based on the work of [amurcanov](https://github.com/amurcanov/tg-ws-proxy-android), with the commit history preserved. The original repository is archived, so the Android implementation is maintained here: fixes, compatibility with the current Flowseal core, and the second module.
-- **TG-WS core** — [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy) `v1.11.4`. The snapshot has one change: it selects the bundled Chaquopy OpenSSL library for AES on Android.
+- **TG-WS core** — [MIT](upstream/flowseal/LICENSE), [Flowseal](https://github.com/Flowseal/tg-ws-proxy). The current tag is in the [lock file](upstream/flowseal.lock.json). The snapshot has one change: it selects the bundled Chaquopy OpenSSL library for AES on Android.
 - **ByeByeDPI native part** — [GPL-3.0](upstream/byebyedpi/LICENSE), [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI) `v.1.8.2`. Bundled dependencies: [hufrea/byedpi](https://github.com/hufrea/byedpi) (MIT), [heiher/hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) (MIT), hev-socks5-core / hev-task-system / yaml (MIT), [lwip](https://savannah.nongnu.org/projects/lwip/) (BSD-3-Clause) and the preinstalled wintun (WireGuard). The exact set and licences are pinned in `upstream/byebyedpi.lock.json`.
 - **Fonts** Unbounded, Onest and JetBrains Mono — [SIL OFL 1.1](licenses/fonts).
 - **The `derigava_█` mark** is not distributed with the code: GPLv3 grants no rights to trademarks. See [NOTICE.md](NOTICE.md).

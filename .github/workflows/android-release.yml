@@ -9,6 +9,10 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
+      update_flowseal:
+        description: 'Check latest stable Flowseal (verify only off main)'
+        type: boolean
+        default: false
       publish_release:
         description: 'Publish a signed GitHub release from main'
         type: boolean
@@ -17,12 +21,22 @@ on:
         description: 'Base64 of a PEM certificate for a locally decryptable, signed test APK'
         type: string
         required: false
+      flowseal_revision:
+        description: 'Internal: exact promoted main SHA for an automatic release'
+        type: string
+        required: false
+      flowseal_tag:
+        description: 'Internal: upstream tag for an automatic release'
+        type: string
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: android-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  group: android-${{ github.ref != 'refs/heads/main' && github.ref || 'release' }}
+  # Do not replace an already queued auto-release with an unrelated push or dispatch.
+  queue: max
   cancel-in-progress: false
 
 env:
@@ -34,7 +48,7 @@ jobs:
   keepalive:
     # GitHub turns schedules off after 60 days without activity in a public
     # repository, and a quiet upstream would silently stop the core updates.
-    if: github.event_name == 'schedule'
+    if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       actions: write
@@ -44,25 +58,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/android-release.yml/enable"
 
-  check-upstream:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Report the latest upstream tag for review
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          locked="$(jq -er .tag upstream/flowseal.lock.json)"
-          latest="$(gh api repos/Flowseal/tg-ws-proxy/releases/latest --jq .tag_name)"
-          printf 'Locked Flowseal release: %s\n\nLatest Flowseal release: %s\n' "$locked" "$latest" >> "$GITHUB_STEP_SUMMARY"
-
   prepare:
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      UPDATE_FLOWSEAL: ${{ github.event_name == 'schedule' || inputs.update_flowseal }}
     outputs:
+      latest: ${{ steps.plan.outputs.latest }}
+      revision: ${{ steps.snapshot.outputs.revision }}
       version_code: ${{ steps.release.outputs.version_code }}
       version_name: ${{ steps.release.outputs.version_name }}
       updates_enabled: ${{ steps.release.outputs.updates_enabled }}
@@ -74,13 +78,61 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Plan a stable Flowseal update
+        id: plan
+        if: env.UPDATE_FLOWSEAL == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          plan=$(python scripts/sync_upstream.py --plan)
+          jq -r '"Locked Flowseal: \(.locked)\nCandidate: \(if .candidate == "" then "none" else .candidate end)"' \
+            <<< "$plan" >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit candidate locally (no write token)
+        id: snapshot
+        if: steps.plan.outputs.candidate != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ steps.plan.outputs.candidate }}
+        run: |
+          export GIT_AUTHOR_NAME='github-actions[bot]' GIT_COMMITTER_NAME='github-actions[bot]'
+          export GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com'
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          # Re-running the same candidate should produce the same commit.
+          export GIT_AUTHOR_DATE="$(git show -s --format=%cI HEAD)"
+          export GIT_COMMITTER_DATE="$GIT_AUTHOR_DATE"
+          env -u GITHUB_OUTPUT python scripts/sync_upstream.py --ref "$CANDIDATE_TAG"
+          test "$(jq -er .tag upstream/flowseal.lock.json)" = "$CANDIDATE_TAG"
+          git add -f -A -- upstream/flowseal upstream/flowseal.lock.json
+          git -c core.hooksPath=/dev/null commit -m "build: pin Flowseal $CANDIDATE_TAG"
+          git bundle create "$RUNNER_TEMP/flowseal.bundle" HEAD "^$GITHUB_SHA"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.snapshot.outputs.revision != ''
+        with:
+          name: flowseal-candidate
+          path: ${{ runner.temp }}/flowseal.bundle
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+      - name: Guard the automatic release hand-off
+        if: inputs.flowseal_revision != '' || inputs.flowseal_tag != ''
+        env:
+          EXPECTED_REVISION: ${{ inputs.flowseal_revision }}
+          EXPECTED_TAG: ${{ inputs.flowseal_tag }}
+        run: |
+          test "$GITHUB_REF" = 'refs/heads/main'
+          test "$EXPECTED_REVISION" = "$GITHUB_SHA"
+          test "$(jq -er .tag upstream/flowseal.lock.json)" = "$EXPECTED_TAG"
       - name: Verify the committed upstream source
         id: upstream
+        if: env.UPDATE_FLOWSEAL != 'true' || steps.snapshot.outputs.revision != ''
         run: |
           python scripts/sync_upstream.py --check
           python scripts/sync_byebyedpi.py --check
       - name: Resolve release metadata
         id: release
+        if: steps.upstream.outputs.core_version != ''
         env:
           PRIVATE: ${{ github.event.repository.private }}
           GH_TOKEN: ${{ github.token }}
@@ -101,6 +153,7 @@ jobs:
 
   verify:
     needs: prepare
+    if: needs.prepare.outputs.version_name != ''
     outputs:
       apk_sha256: ${{ steps.package.outputs.apk_sha256 }}
     runs-on: ubuntu-24.04
@@ -124,6 +177,13 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-disabled: ${{ needs.prepare.outputs.revision != '' }}
+      - uses: ./.github/actions/import-flowseal-candidate
+        if: needs.prepare.outputs.revision != ''
+        with:
+          revision: ${{ needs.prepare.outputs.revision }}
+          checkout: 'true'
       - name: Python runtime and integrity checks
         run: |
           python -m pip install -r scripts/requirements-test.txt
@@ -238,6 +298,13 @@ jobs:
         with:
           packages: platform-tools
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+        with:
+          cache-disabled: ${{ needs.prepare.outputs.revision != '' }}
+      - uses: ./.github/actions/import-flowseal-candidate
+        if: needs.prepare.outputs.revision != ''
+        with:
+          revision: ${{ needs.prepare.outputs.revision }}
+          checkout: 'true'
       - name: Build test packages before starting the emulator
         run: |
           sdkmanager 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
@@ -291,7 +358,7 @@ jobs:
 
   play-protect-preview:
     needs: [prepare, verify, android]
-    if: github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner && !inputs.publish_release && inputs.play_protect_recipient != ''
+    if: github.event_name == 'workflow_dispatch' && github.actor == github.repository_owner && !inputs.update_flowseal && !inputs.publish_release && inputs.play_protect_recipient != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -352,7 +419,7 @@ jobs:
 
   release:
     needs: [prepare, verify, android]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && inputs.play_protect_recipient == ''
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && !inputs.update_flowseal && inputs.publish_release && inputs.play_protect_recipient == ''
     permissions:
       contents: write
       attestations: write
@@ -425,8 +492,17 @@ jobs:
       - name: Publish signed release in the repository's current visibility
         env:
           GH_TOKEN: ${{ github.token }}
+          FLOWSEAL_REVISION: ${{ inputs.flowseal_revision }}
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$GITHUB_SHA"
+          if [[ -n "$FLOWSEAL_REVISION" ]]; then
+            existing_release=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .target_commitish')
+            if grep -Fxq "$FLOWSEAL_REVISION" <<< "$existing_release"; then
+              echo 'A release for this Flowseal revision already exists.'
+              exit 0
+            fi
+          fi
           tag="v$APP_VERSION_NAME"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to replace an installed version."
@@ -442,3 +518,75 @@ jobs:
           gh release create "$tag" release/*.apk release/update.json release/SHA256SUMS \
             --target "$(git rev-parse HEAD)" --title "ByeBye TGWS Proxy Android $APP_VERSION_NAME" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
+
+  promote-flowseal:
+    needs: [prepare, verify, android]
+    if: github.ref == 'refs/heads/main' && needs.prepare.outputs.revision != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/import-flowseal-candidate
+        with:
+          revision: ${{ needs.prepare.outputs.revision }}
+      - name: Fast-forward main and explicitly dispatch the committed-source release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+          FLOWSEAL_TAG: ${{ needs.prepare.outputs.latest }}
+        run: |
+          live=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$live" != "$REVISION" ]]; then
+            test "$live" = "$GITHUB_SHA" || { echo 'main changed during verification; retry on current main.'; exit 1; }
+            # Check provenance again after testing. Never check out candidate files in this job.
+            lock=$(git show "$REVISION:upstream/flowseal.lock.json")
+            test "$(jq -er .tag <<< "$lock")" = "$FLOWSEAL_TAG"
+            test "$(gh api "repos/Flowseal/tg-ws-proxy/commits/$FLOWSEAL_TAG" --jq .sha)" = "$(jq -er .commit <<< "$lock")"
+            gh auth setup-git
+            git -c core.hooksPath=/dev/null push origin "$REVISION:refs/heads/main"
+          fi
+          # GITHUB_TOKEN pushes do not trigger push workflows. A new dispatch gives
+          # attestation the exact committed main SHA, not the pre-update revision.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$REVISION" || {
+            echo 'main changed before the release could be dispatched.'
+            exit 1
+          }
+          gh workflow run android-release.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f publish_release=true -f flowseal_revision="$REVISION" -f flowseal_tag="$FLOWSEAL_TAG"
+
+  report-flowseal-failure:
+    needs: [prepare, verify, android, promote-flowseal, release]
+    if: >-
+      ${{ failure() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || inputs.update_flowseal || inputs.flowseal_revision != '') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: File one issue per upstream version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FLOWSEAL_TAG: ${{ needs.prepare.outputs.latest || inputs.flowseal_tag }}
+        run: |
+          tag=${FLOWSEAL_TAG:-unknown}
+          if [[ ! "$tag" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then tag=unknown; fi
+          title="Flowseal $tag: automatic update failed"
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues?state=all&per_page=100" \
+            --jq '.[] | select(.pull_request == null) | .title')
+          if grep -Fxq "$title" <<< "$existing"; then exit 0; fi
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "- \(.name): \([.steps[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")) — \(.html_url)"')
+          {
+            printf 'Upstream: `%s`\n\nRun: %s/%s/actions/runs/%s/attempts/%s\n\n' \
+              "$tag" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'Failed checks or steps:\n%s\n\n' "${jobs:-See the run for details.}"
+            printf 'A failed verification does not promote the candidate. A failed release does not replace the previously published APK.\n'
+          } > "$RUNNER_TEMP/flowseal-issue.md"
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$RUNNER_TEMP/flowseal-issue.md"
