@@ -19,6 +19,8 @@ REPOSITORY = "Flowseal/tg-ws-proxy"
 LOCK = ROOT / "upstream/flowseal.lock.json"
 VENDOR = ROOT / "upstream/flowseal"
 AES_SOURCE = "proxy/_aes.py"
+TAG = re.compile(r"v?([0-9]+)\.([0-9]+)\.([0-9]+)(?:\.([0-9]+))?")
+SHA = re.compile(r"[0-9a-f]{40}")
 AES_LOADER = b'    def _load_libcrypto():\n        name = ctypes.util.find_library("crypto")'
 ANDROID_AES_LOADER = (
     b'    import sys\n\n'
@@ -99,6 +101,30 @@ def validate(vendor: Path, lock: dict) -> None:
         raise ValueError(f"Upstream integrity failed: added={added}, missing={missing}, modified={modified}")
 
 
+def tag_version(tag: str) -> tuple[int, ...]:
+    match = TAG.fullmatch(tag)
+    if not match:
+        raise ValueError(f"Unsupported stable release tag: {tag!r}")
+    return tuple(int(part or 0) for part in match.groups())
+
+
+def resolve_commit(ref: str) -> str:
+    tag_version(ref)
+    commit = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/commits/{urllib.parse.quote(ref, safe='')}"))["sha"]
+    if not SHA.fullmatch(commit):
+        raise ValueError("Invalid upstream commit SHA")
+    return commit
+
+
+def plan_update(lock: dict, live_locked_commit: str, release: dict) -> str | None:
+    if lock["commit"] != live_locked_commit:
+        raise ValueError(f"Locked Flowseal tag {lock['tag']} moved to a different commit")
+    if release.get("draft") is not False or release.get("prerelease") is not False:
+        return None
+    ref = release["tag_name"]
+    return ref if tag_version(ref) > tag_version(lock["tag"]) else None
+
+
 def sync(ref: str | None = None) -> dict:
     previous = json.loads(LOCK.read_text(encoding="utf-8")) if LOCK.exists() else None
     if ref is None:
@@ -106,11 +132,7 @@ def sync(ref: str | None = None) -> dict:
         if release.get("draft") or release.get("prerelease"):
             raise ValueError("Upstream release must be stable and published")
         ref = release["tag_name"]
-    if not re.fullmatch(r"v?\d+\.\d+\.\d+(?:\.\d+)?", ref):
-        raise ValueError(f"Unsupported stable release tag: {ref!r}")
-    commit = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/commits/{urllib.parse.quote(ref, safe='')}"))["sha"]
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        raise ValueError("Invalid upstream commit SHA")
+    commit = resolve_commit(ref)
     if previous and previous.get("tag") == ref and previous.get("commit") != commit:
         raise ValueError(f"Locked Flowseal tag {ref} moved to a different commit")
     if previous and previous["commit"] == commit:
@@ -149,15 +171,30 @@ def sync(ref: str | None = None) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ref", help="Exact stable tag; omitted means latest stable release")
-    parser.add_argument("--check", action="store_true", help="Verify local lock and bytes without network or changes")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="Verify local lock and bytes without network or changes")
+    mode.add_argument("--plan", action="store_true", help="Resolve a newer stable release without writing sources")
     args = parser.parse_args()
-    if args.check:
+    if args.plan:
+        release = json.loads(fetch(f"https://api.github.com/repos/{REPOSITORY}/releases/latest"))
+        latest = release["tag_name"]
+        tag_version(latest)
+        write_outputs({"latest": latest})  # Retain the version even if provenance verification fails.
+        lock = json.loads(LOCK.read_text(encoding="utf-8"))
+        validate(VENDOR, lock)
+        candidate = plan_update(lock, resolve_commit(lock["tag"]), release)
+        result = {"candidate": candidate or "", "locked": lock["tag"]}
+    elif args.check:
         lock = json.loads(LOCK.read_text(encoding="utf-8"))
         validate(VENDOR, lock)
         result = {"changed": False, "tag": lock["tag"], "commit": lock["commit"], "core_version": lock["core_version"]}
     else:
         result = sync(args.ref)
     print(json.dumps(result))
+    write_outputs(result)
+
+
+def write_outputs(result: dict) -> None:
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, "a", encoding="utf-8") as stream:
             for key, value in result.items():

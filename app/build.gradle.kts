@@ -91,6 +91,12 @@ android {
         // Compose UI tests run under Robolectric in the JVM unit-test task, so
         // string/drawable/font resources must be visible to the Robolectric sandbox.
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Robolectric resolves instrumented SDKs outside Gradle's repositories.
+            // Use the same Maven Central endpoint as Gradle's mavenCentral().
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 }
 chaquopy {
